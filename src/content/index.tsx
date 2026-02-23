@@ -6,6 +6,14 @@ import { observeLinkedInChanges } from './observer'
 
 console.log('Blink content script loaded!')
 
+// Background script의 ping에 응답 (중복 주입 방지)
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message.type === 'ping') {
+    sendResponse({ status: 'ok' })
+  }
+  return true
+})
+
 // LinkedIn SPA 변화 감지 시작
 observeLinkedInChanges()
 

@@ -3,55 +3,131 @@
  * history.pushState 인터셉트 + popstate로 URL 변화 감지
  */
 
-import { createElement } from 'react'
-import { createRoot, type Root } from 'react-dom/client'
-import { SaveLeadPanel, PANEL_ID } from './components/SaveLeadPanel'
+import { type Root } from 'react-dom/client'
+import { createBlinkButton, BUTTON_ID } from './components/BlinkButton'
 import { createSearchBadge, BADGE_CLASS } from './components/StatusBadge'
 import { waitForElement } from './utils/dom'
+import { normalizeLinkedInProfileUrl } from '@/utils/url'
 import { storage } from '@/storage'
 import type { Contact } from '@/types'
 
 let currentUrl = location.href
-let panelRoot: Root | null = null
+let buttonRoots: Root[] = [] // 여러 버튼을 관리 (프로필 카드 + sticky header)
 let searchObserver: MutationObserver | null = null
 let cachedContactMap: Map<string, Contact> | null = null
+let urlPollingInterval: number | null = null
 
 /**
  * LinkedIn 페이지 변화 감지 시작
- * MutationObserver 대신 history API 인터셉트 사용 (CPU 효율적)
+ * URL 폴링 + history API 인터셉트 조합
  */
 export function observeLinkedInChanges() {
+  console.log('Blink: Starting LinkedIn page observer')
+
   function handleUrlChange() {
     if (location.href !== currentUrl) {
+      console.log(`Blink: URL changed from ${currentUrl} to ${location.href}`)
       currentUrl = location.href
       onPageChange()
     }
   }
 
-  // SPA 네비게이션 감지 (LinkedIn은 pushState 사용)
-  const originalPushState = history.pushState.bind(history)
-  history.pushState = function (...args) {
-    originalPushState(...args)
-    handleUrlChange()
+  // 방법 1: SPA 네비게이션 감지 (LinkedIn은 pushState 사용)
+  try {
+    const originalPushState = history.pushState
+    history.pushState = function (...args) {
+      originalPushState.apply(history, args)
+      handleUrlChange()
+    }
+
+    const originalReplaceState = history.replaceState
+    history.replaceState = function (...args) {
+      originalReplaceState.apply(history, args)
+      handleUrlChange()
+    }
+    console.log('Blink: History API intercepted')
+  } catch (e) {
+    console.warn('Blink: Failed to intercept history API', e)
   }
 
-  const originalReplaceState = history.replaceState.bind(history)
-  history.replaceState = function (...args) {
-    originalReplaceState(...args)
-    handleUrlChange()
-  }
-
-  // 브라우저 뒤로/앞으로 버튼
+  // 방법 2: 브라우저 뒤로/앞으로 버튼
   window.addEventListener('popstate', handleUrlChange)
 
-  // 초기 페이지 로드
+  // 방법 3: URL 폴링 (fallback - LinkedIn이 다른 방식으로 라우팅할 경우)
+  // 기존 폴링이 있으면 정리
+  if (urlPollingInterval) {
+    clearInterval(urlPollingInterval)
+  }
+  urlPollingInterval = window.setInterval(() => {
+    handleUrlChange()
+  }, 500) // 500ms 간격 (배터리 및 CPU 효율성 개선)
+  console.log('Blink: URL polling started (500ms interval)')
+
+  // 초기 페이지 로드 - 현재 URL 동기화
+  currentUrl = location.href
+  console.log(`Blink: Initial page load, URL: ${currentUrl}`)
   onPageChange()
+
+  // DOM이 완전히 로드될 때까지 기다린 후 재시도
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+      currentUrl = location.href
+      console.log('Blink: DOMContentLoaded event fired, retrying')
+      onPageChange()
+    })
+  }
+
+  // 추가 안전장치: 페이지 로드 완료 후 재시도
+  window.addEventListener('load', () => {
+    currentUrl = location.href
+    console.log('Blink: Window load event fired, retrying')
+    setTimeout(() => onPageChange(), 1000)
+  })
+
+  // Extension unload 또는 페이지 이탈 시 cleanup
+  window.addEventListener('beforeunload', () => {
+    cleanup()
+  })
+}
+
+/**
+ * 리소스 정리 함수
+ */
+function cleanup() {
+  // URL 폴링 정리
+  if (urlPollingInterval) {
+    clearInterval(urlPollingInterval)
+    urlPollingInterval = null
+    console.log('Blink: URL polling cleared')
+  }
+
+  // 버튼 React roots 정리
+  buttonRoots.forEach(root => {
+    try {
+      root.unmount()
+    } catch (e) {
+      console.warn('Blink: Failed to unmount button root', e)
+    }
+  })
+  buttonRoots = []
+
+  // 검색 observer 정리
+  if (searchObserver) {
+    searchObserver.disconnect()
+    searchObserver = null
+    console.log('Blink: Search observer disconnected')
+  }
+
+  // 캐시 정리
+  cachedContactMap = null
 }
 
 /**
  * 페이지 변경 시 실행
  */
 function onPageChange() {
+  console.log(`Blink: onPageChange called, isProfile: ${isProfilePage()}, isSearch: ${isSearchPage()}`)
+
   // 검색 페이지가 아니면 검색 observer 정리
   if (!isSearchPage() && searchObserver) {
     searchObserver.disconnect()
@@ -59,55 +135,109 @@ function onPageChange() {
   }
 
   if (isProfilePage()) {
-    injectProfilePanel()
+    console.log('Blink: Profile page detected, injecting button')
+    injectBlinkButton()
   }
 
   if (isSearchPage()) {
+    console.log('Blink: Search page detected, injecting badges')
     injectSearchBadges()
   }
 }
 
 function isProfilePage(): boolean {
-  return /linkedin\.com\/in\/[^/]+\/?/.test(currentUrl)
+  const url = location.href
+  return /linkedin\.com\/in\/[^/]+\/?/.test(url)
 }
 
 function isSearchPage(): boolean {
-  return currentUrl.includes('/search/results/people/')
+  const url = location.href
+  return url.includes('/search/results/people/')
 }
 
 /**
- * 프로필 페이지에 Save Lead 패널 주입
+ * 프로필 페이지에 Blink 버튼 주입 (상단 프로필 카드만, sticky header 제외)
  */
-async function injectProfilePanel() {
-  // 기존 패널 언마운트 후 제거 (SPA 이동 시 새 프로필로 교체)
-  if (panelRoot) {
-    panelRoot.unmount()
-    panelRoot = null
+async function injectBlinkButton() {
+  // 기존 버튼들 언마운트 후 제거
+  buttonRoots.forEach(root => root.unmount())
+  buttonRoots = []
+  document.querySelectorAll(`[id^="${BUTTON_ID}"]`).forEach(el => el.remove())
+
+  console.log('Blink: Attempting to inject button on profile page')
+
+  // More 버튼 찾기 (여러 selector 시도)
+  const moreButtonSelectors = [
+    'button[aria-label*="More"]',
+    'button[aria-label*="more"]',
+    'button[aria-label*="추가"]', // 한국어 버전
+  ]
+
+  // 첫 번째 More 버튼이 나타날 때까지 대기
+  let foundSelector = ''
+  for (const selector of moreButtonSelectors) {
+    const btn = await waitForElement(selector, 1000)
+    if (btn) {
+      foundSelector = selector
+      console.log(`Blink: Found More button(s) with selector: ${selector}`)
+      break
+    }
   }
-  document.getElementById(PANEL_ID)?.remove()
 
-  // LinkedIn 프로필 DOM 로딩 대기 (여러 셀렉터 순서대로 시도)
-  const target = await waitForElement(
-    '.pv-top-card-v2-ctas__custom, .ph5.pb5 > :last-child',
-    5000
-  )
-
-  if (!target) {
-    console.log('Blink: injection point not found')
+  if (!foundSelector) {
+    console.warn('Blink: More button not found')
     return
   }
 
-  // URL이 바뀌어 있으면 중단 (대기 중 페이지가 변경된 경우)
-  if (!isProfilePage()) return
+  // 모든 More 버튼 찾기
+  const allMoreButtons = Array.from(document.querySelectorAll(foundSelector))
+  console.log(`Blink: Found ${allMoreButtons.length} More button(s) total`)
 
-  const container = document.createElement('div')
-  container.id = PANEL_ID
+  // Sticky가 아닌 버튼 찾기
+  let profileCardButton: Element | null = null
 
-  // 버튼 영역 다음에 삽입 (앞에 삽입하면 프로필 사진과 겹침)
-  target.parentNode?.insertBefore(container, target.nextSibling)
+  for (const moreButton of allMoreButtons) {
+    // Sticky header의 버튼인지 확인
+    let parent = moreButton.parentElement
+    let isSticky = false
 
-  panelRoot = createRoot(container)
-  panelRoot.render(createElement(SaveLeadPanel))
+    for (let i = 0; i < 10 && parent; i++) {
+      const style = window.getComputedStyle(parent)
+      if (style.position === 'fixed' || style.position === 'sticky') {
+        const top = parseInt(style.top || '0')
+        if (top < 100) {
+          isSticky = true
+          console.log('Blink: Skipping sticky header button')
+          break
+        }
+      }
+      parent = parent.parentElement
+    }
+
+    if (!isSticky) {
+      profileCardButton = moreButton
+      console.log('Blink: Found profile card More button (non-sticky)')
+      break
+    }
+  }
+
+  if (!profileCardButton) {
+    console.warn('Blink: Only found sticky header buttons, profile card button not available')
+    return
+  }
+
+  // More 버튼을 찾았으면 옆에 Blink 버튼 추가
+  if (!isProfilePage()) {
+    console.log('Blink: Page changed during injection, aborting')
+    return
+  }
+
+  const { button, root } = createBlinkButton()
+  button.id = BUTTON_ID
+
+  profileCardButton.parentElement?.insertBefore(button, profileCardButton.nextSibling)
+  buttonRoots.push(root)
+  console.log('Blink: Button injected next to More button in profile card')
 }
 
 /**
@@ -157,8 +287,7 @@ function injectBadgesIntoResults() {
       : (result.querySelector('a[href*="/in/"]') as HTMLAnchorElement | null)?.href
     if (!href?.includes('/in/')) continue
 
-    const url = new URL(href)
-    const profileId = url.origin + url.pathname.replace(/\/$/, '')
+    const profileId = normalizeLinkedInProfileUrl(href)
     const contact = contactMap.get(profileId)
     if (!contact) continue
 

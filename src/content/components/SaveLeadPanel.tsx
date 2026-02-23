@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { storage } from '@/storage'
 import { parseProfileInfo } from '@/content/utils/parser'
+import { getCurrentProfileId } from '@/utils/url'
 import type { Contact, FollowUpStatus } from '@/types'
 import { STATUS_CONFIG } from '@/types'
 import { addDays } from '@/utils/date'
@@ -13,44 +14,81 @@ export function SaveLeadPanel() {
   const [memo, setMemo] = useState('')
   const [existing, setExisting] = useState<Contact | null>(null)
   const [saved, setSaved] = useState(false)
-  const [profileId] = useState(() => {
-    // query string 제거하여 정규화
-    const url = new URL(window.location.href)
-    return url.origin + url.pathname.replace(/\/$/, '')
-  })
+  const [error, setError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [profileId] = useState(() => getCurrentProfileId())
 
   useEffect(() => {
-    storage.getContact(profileId).then(c => {
-      if (c) {
-        setExisting(c)
-        setStatus(c.status)
-        setFollowUpDays(c.followUpAfterDays)
-        setMemo(c.memo ?? '')
-      }
-    })
+    storage.getContact(profileId)
+      .then(c => {
+        if (c) {
+          setExisting(c)
+          setStatus(c.status)
+          setFollowUpDays(c.followUpAfterDays)
+          setMemo(c.memo ?? '')
+        }
+      })
+      .catch(err => {
+        console.error('Failed to load existing contact:', err)
+        // 기존 연락처 로드 실패는 치명적이지 않으므로 조용히 처리
+      })
   }, [profileId])
 
   const profileInfo = parseProfileInfo()
-  if (!profileInfo) return null
+
+  if (!profileInfo) {
+    return (
+      <div style={{
+        background: '#fff3cd',
+        border: '1px solid #ffc107',
+        borderRadius: '8px',
+        padding: '12px',
+        marginTop: '14px',
+        marginBottom: '8px',
+        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+        fontSize: '13px',
+        color: '#856404',
+      }}>
+        <strong>⚠️ Blink</strong>
+        <p style={{ margin: '4px 0 0 0', fontSize: '12px' }}>
+          Could not read profile information. Please reload the page.
+        </p>
+      </div>
+    )
+  }
 
   async function handleSave() {
-    const now = Date.now()
-    const contact: Contact = {
-      id: profileId,
-      name: profileInfo!.name,
-      title: profileInfo!.title,
-      company: profileInfo!.company,
-      status,
-      lastContactedAt: now,
-      nextFollowUpDate: addDays(new Date(now), followUpDays).getTime(),
-      followUpAfterDays: followUpDays,
-      memo: memo.trim() || undefined,
-      createdAt: existing?.createdAt ?? now,
+    if (saving || !profileInfo) return
+
+    try {
+      setSaving(true)
+      setError(null)
+
+      const now = Date.now()
+      const contact: Contact = {
+        id: profileId,
+        name: profileInfo.name,
+        title: profileInfo.title,
+        company: profileInfo.company,
+        status,
+        lastContactedAt: now,
+        nextFollowUpDate: addDays(new Date(now), followUpDays).getTime(),
+        followUpAfterDays: followUpDays,
+        memo: memo.trim() || undefined,
+        createdAt: existing?.createdAt ?? now,
+      }
+
+      await storage.saveContact(contact)
+      setExisting(contact)
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+    } catch (err) {
+      console.error('Failed to save contact:', err)
+      const message = err instanceof Error ? err.message : 'Failed to save contact'
+      setError(message)
+    } finally {
+      setSaving(false)
     }
-    await storage.saveContact(contact)
-    setExisting(contact)
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
   }
 
   const cfg = STATUS_CONFIG[status]
@@ -62,7 +100,7 @@ export function SaveLeadPanel() {
       borderRadius: '8px',
       padding: '16px',
       marginTop: '14px',
-      marginBottom: '8px',
+      marginBottom: '20px',
       fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
       fontSize: '14px',
       boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
@@ -157,23 +195,40 @@ export function SaveLeadPanel() {
         />
       </div>
 
+      {/* Error message */}
+      {error && (
+        <div style={{
+          padding: '8px',
+          marginBottom: '10px',
+          background: '#fee',
+          border: '1px solid #fcc',
+          borderRadius: '4px',
+          fontSize: '12px',
+          color: '#c00',
+        }}>
+          {error}
+        </div>
+      )}
+
       {/* Save button */}
       <button
         onClick={handleSave}
+        disabled={saving}
         style={{
           width: '100%',
           padding: '8px',
-          background: saved ? '#057642' : '#0A66C2',
+          background: saved ? '#057642' : saving ? '#999' : '#0A66C2',
           color: 'white',
           border: 'none',
           borderRadius: '4px',
           fontWeight: 600,
           fontSize: '13px',
-          cursor: 'pointer',
+          cursor: saving ? 'not-allowed' : 'pointer',
           transition: 'background 0.2s',
+          opacity: saving ? 0.7 : 1,
         }}
       >
-        {saved ? '✓ Saved!' : existing ? 'Update Lead' : 'Save Lead'}
+        {saved ? '✓ Saved!' : saving ? 'Saving...' : existing ? 'Update Lead' : 'Save Lead'}
       </button>
     </div>
   )

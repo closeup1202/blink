@@ -7,6 +7,7 @@ import { isOverdue } from '@/utils/date'
 function App() {
   const [contacts, setContacts] = useState<Contact[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     loadContacts()
@@ -14,36 +15,61 @@ function App() {
 
   async function loadContacts() {
     try {
+      setError(null)
       const allContacts = await storage.getAllContacts()
       setContacts(allContacts)
     } catch (error) {
       console.error('Failed to load contacts:', error)
+      const message = error instanceof Error ? error.message : 'Failed to load contacts'
+      setError(message)
     } finally {
       setLoading(false)
     }
   }
 
-  function exportCSV() {
-    const header = ['Name', 'Title', 'Company', 'Status', 'Last Contacted', 'Next Follow Up', 'Notes', 'Profile URL']
-    const rows = contacts.map(c => [
-      c.name,
-      c.title ?? '',
-      c.company ?? '',
-      c.status,
-      new Date(c.lastContactedAt).toLocaleDateString(),
-      new Date(c.nextFollowUpDate).toLocaleDateString(),
-      c.memo ?? '',
-      c.id,
-    ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(','))
+  function sanitizeCSVField(value: string): string {
+    // CSV 수식 주입 방어: =, +, -, @ 로 시작하는 경우 ' 추가
+    const dangerous = /^[=+\-@\t\r]/
+    let sanitized = String(value)
 
-    const csv = [header.join(','), ...rows].join('\n')
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `blink-contacts-${new Date().toISOString().slice(0, 10)}.csv`
-    a.click()
-    URL.revokeObjectURL(url)
+    if (dangerous.test(sanitized)) {
+      sanitized = "'" + sanitized
+    }
+
+    // 쌍따옴표 이스케이프 및 개행문자 제거
+    sanitized = sanitized
+      .replace(/"/g, '""')
+      .replace(/[\r\n]/g, ' ')
+
+    return `"${sanitized}"`
+  }
+
+  function exportCSV() {
+    try {
+      const header = ['Name', 'Title', 'Company', 'Status', 'Last Contacted', 'Next Follow Up', 'Notes', 'Profile URL']
+      const rows = contacts.map(c => [
+        c.name,
+        c.title ?? '',
+        c.company ?? '',
+        c.status,
+        new Date(c.lastContactedAt).toLocaleDateString(),
+        new Date(c.nextFollowUpDate).toLocaleDateString(),
+        c.memo ?? '',
+        c.id,
+      ].map(v => sanitizeCSVField(String(v))).join(','))
+
+      const csv = [header.join(','), ...rows].join('\n')
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `blink-contacts-${new Date().toISOString().slice(0, 10)}.csv`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (error) {
+      console.error('Failed to export CSV:', error)
+      alert('Failed to export contacts. Please try again.')
+    }
   }
 
   // 상태별로 그룹화
@@ -57,6 +83,27 @@ function App() {
     return (
       <div className="w-[400px] h-[600px] p-4 flex items-center justify-center">
         <p className="text-gray-500">Loading...</p>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="w-[400px] h-[600px] p-4 flex flex-col items-center justify-center">
+        <div className="text-center">
+          <p className="text-red-600 font-semibold mb-2">Error</p>
+          <p className="text-sm text-gray-600 mb-4">{error}</p>
+          <button
+            onClick={() => {
+              setError(null)
+              setLoading(true)
+              loadContacts()
+            }}
+            className="bg-linkedin text-white px-4 py-2 rounded text-sm hover:bg-linkedin/90 transition-colors"
+          >
+            Retry
+          </button>
+        </div>
       </div>
     )
   }

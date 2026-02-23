@@ -7,7 +7,10 @@
       "Bash(dir:*)",
       "Bash(tree:*)",
       "Bash(cat:*)",
-      "Bash(cd:*)"
+      "Bash(cd:*)",
+      "Bash(npm run type-check:*)",
+      "Read(//c/Users/close/바탕 화면/**)",
+      "Bash(git add:*)"
     ],
     "deny": [],
     "ask": []

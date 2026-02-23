@@ -13,8 +13,15 @@ function ContactCard({ contact, onDelete }: ContactCardProps) {
 
   async function handleDelete() {
     if (!confirm(`Delete ${contact.name}?`)) return
-    await storage.deleteContact(contact.id)
-    onDelete()
+
+    try {
+      await storage.deleteContact(contact.id)
+      onDelete()
+    } catch (error) {
+      console.error('Failed to delete contact:', error)
+      const message = error instanceof Error ? error.message : 'Failed to delete contact'
+      alert(`Error: ${message}`)
+    }
   }
 
   return (

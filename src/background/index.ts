@@ -7,15 +7,54 @@
 import { storage } from '@/storage'
 import { isOverdue } from '@/utils/date'
 
-// Extension 설치 시
-chrome.runtime.onInstalled.addListener(() => {
+// Extension 설치 또는 업데이트 시
+chrome.runtime.onInstalled.addListener(async (details) => {
   console.log('Blink installed!')
 
-  // 매일 overdue 체크하는 알람 설정
+  // 1시간마다 overdue 체크하는 알람 설정
   chrome.alarms.create('checkOverdue', {
-    periodInMinutes: 60 * 24, // 매일
+    delayInMinutes: 0, // 즉시 시작
+    periodInMinutes: 60, // 1시간마다
   })
+
+  // 이미 열려있는 LinkedIn 탭에 content script 주입
+  if (details.reason === 'install' || details.reason === 'update') {
+    await injectContentScriptToExistingTabs()
+  }
 })
+
+/**
+ * 이미 열려있는 LinkedIn 탭에 content script 주입
+ */
+async function injectContentScriptToExistingTabs() {
+  try {
+    const tabs = await chrome.tabs.query({
+      url: 'https://www.linkedin.com/*'
+    })
+
+    for (const tab of tabs) {
+      if (!tab.id) continue
+
+      try {
+        // content script가 이미 주입되었는지 확인
+        await chrome.tabs.sendMessage(tab.id, { type: 'ping' })
+      } catch {
+        // 주입되지 않았으면 주입
+        try {
+          await chrome.scripting.executeScript({
+            target: { tabId: tab.id },
+            files: ['content.js']
+          })
+          console.log(`Blink: Injected into tab ${tab.id}`)
+        } catch (err) {
+          console.warn(`Blink: Failed to inject into tab ${tab.id}:`, err)
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Blink: Failed to inject content scripts:', err)
+  }
+}
 
 // 알람 리스너
 chrome.alarms.onAlarm.addListener((alarm) => {

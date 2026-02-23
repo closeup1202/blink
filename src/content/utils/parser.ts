@@ -16,19 +16,17 @@ export function parseProfileInfo(): ProfileInfo | null {
   try {
     const profileUrl = window.location.href
 
-    // 이름 추출 (LinkedIn이 클래스명을 난독화하므로 안정적인 유틸리티 클래스 조합 사용)
-    const nameElement = document.querySelector('h1.inline.t-24') ?? document.querySelector('h1')
-    const name = nameElement?.textContent?.trim() || ''
+    // 이름 추출 - 다중 fallback으로 안정성 향상
+    const name = extractName()
+    if (!name) {
+      console.warn('Blink: Could not extract profile name')
+      return null
+    }
 
-    // 직함 추출
-    const titleElement = document.querySelector('.text-body-medium.break-words')
-    const title = titleElement?.textContent?.trim() || ''
+    // 직함 및 회사 추출
+    const { title, company } = extractTitleAndCompany()
 
-    // 회사명은 직함에서 "at" 뒤에 있는 경우가 많음
-    // 예: "Founder at Acme Inc." -> "Acme Inc."
-    const company = extractCompanyFromTitle(title)
-
-    if (!name || !profileUrl) {
+    if (!profileUrl) {
       return null
     }
 
@@ -45,12 +43,80 @@ export function parseProfileInfo(): ProfileInfo | null {
 }
 
 /**
- * 직함에서 회사명 추출
+ * 이름 추출 (다중 셀렉터 fallback)
+ */
+function extractName(): string {
+  const selectors = [
+    'h1.inline.t-24',                          // 기본 셀렉터
+    'h1.text-heading-xlarge',                  // 새 디자인
+    '.pv-top-card--list h1',                   // 레거시
+    '[data-generated-suggestion-target] h1',   // 동적 로드
+    'main h1',                                 // 최후 수단
+  ]
+
+  for (const selector of selectors) {
+    const element = document.querySelector(selector)
+    const text = element?.textContent?.trim()
+    if (text && text.length > 0 && text.length < 100) { // 합리적인 이름 길이
+      return text
+    }
+  }
+
+  return ''
+}
+
+/**
+ * 직함 및 회사 추출 (개선된 로직)
+ */
+function extractTitleAndCompany(): { title: string; company: string } {
+  const selectors = [
+    '.text-body-medium.break-words',           // 기본
+    '.pv-top-card--list .text-body-medium',    // 레거시
+    '.pv-top-card-profile-picture__container ~ div .text-body-medium', // 구조 기반
+  ]
+
+  let title = ''
+
+  for (const selector of selectors) {
+    const element = document.querySelector(selector)
+    const text = element?.textContent?.trim()
+    if (text && text.length > 0) {
+      title = text
+      break
+    }
+  }
+
+  // 회사명 추출 - 개선된 정규식
+  const company = extractCompanyFromTitle(title)
+
+  return { title, company }
+}
+
+/**
+ * 직함에서 회사명 추출 (개선된 정규식)
  */
 function extractCompanyFromTitle(title: string): string {
-  const atIndex = title.toLowerCase().lastIndexOf(' at ')
-  if (atIndex !== -1) {
-    return title.slice(atIndex + 4).trim()
+  if (!title) return ''
+
+  // 다양한 패턴 지원:
+  // "Founder at Acme Inc." -> "Acme Inc."
+  // "CEO @ Company" -> "Company"
+  // "Director of Engineering at Google" -> "Google"
+
+  // 1. "at" 또는 "@" 기준으로 추출 (마지막 등장 위치 사용)
+  const atMatch = title.match(/\s+(?:at|@)\s+(.+?)(?:\s*[·|•]\s*|$)/i)
+  if (atMatch && atMatch[1]) {
+    const company = atMatch[1].trim()
+    // "Director at Large" 같은 오탐 방지 (너무 짧거나 흔한 단어)
+    const commonWords = ['large', 'will', 'home', 'self-employed']
+    if (company.length > 2 && !commonWords.includes(company.toLowerCase())) {
+      return company
+    }
   }
+
+  // 2. Fallback: 별도 회사 정보 영역 찾기 (향후 확장 가능)
+  // LinkedIn이 구조를 변경할 경우를 대비한 주석
+  // const companyElement = document.querySelector('[data-field="company"]')
+
   return ''
 }
