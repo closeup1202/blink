@@ -28,7 +28,7 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 async function checkOverdueContacts() {
   const contacts = await storage.getAllContacts()
   const overdueContacts = contacts.filter(contact =>
-    isOverdue(contact.nextFollowUpDate)
+    isOverdue(contact.nextFollowUpDate) && contact.status !== 'not_interested'
   )
 
   if (overdueContacts.length > 0) {

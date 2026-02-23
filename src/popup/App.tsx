@@ -23,8 +23,31 @@ function App() {
     }
   }
 
+  function exportCSV() {
+    const header = ['Name', 'Title', 'Company', 'Status', 'Last Contacted', 'Next Follow Up', 'Notes', 'Profile URL']
+    const rows = contacts.map(c => [
+      c.name,
+      c.title ?? '',
+      c.company ?? '',
+      c.status,
+      new Date(c.lastContactedAt).toLocaleDateString(),
+      new Date(c.nextFollowUpDate).toLocaleDateString(),
+      c.memo ?? '',
+      c.id,
+    ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(','))
+
+    const csv = [header.join(','), ...rows].join('\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `blink-contacts-${new Date().toISOString().slice(0, 10)}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   // 상태별로 그룹화
-  const overdueContacts = contacts.filter(c => isOverdue(c.nextFollowUpDate))
+  const overdueContacts = contacts.filter(c => isOverdue(c.nextFollowUpDate) && c.status !== 'not_interested')
   const contactedContacts = contacts.filter(c => c.status === 'contacted' && !isOverdue(c.nextFollowUpDate))
   const repliedContacts = contacts.filter(c => c.status === 'replied')
   const meetingContacts = contacts.filter(c => c.status === 'meeting_booked')
@@ -41,9 +64,20 @@ function App() {
   return (
     <div className="w-[400px] h-[600px] bg-white">
       {/* Header */}
-      <div className="bg-linkedin text-white p-4">
-        <h1 className="text-xl font-bold">Blink</h1>
-        <p className="text-sm opacity-90">LinkedIn Follow-up</p>
+      <div className="bg-linkedin text-white p-4 flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-bold">Blink</h1>
+          <p className="text-sm opacity-90">LinkedIn Follow-up</p>
+        </div>
+        {contacts.length > 0 && (
+          <button
+            onClick={exportCSV}
+            className="text-xs bg-white/20 hover:bg-white/30 transition-colors px-3 py-1.5 rounded font-medium"
+            title="Export to CSV"
+          >
+            ↓ CSV
+          </button>
+        )}
       </div>
 
       {/* Content */}
@@ -61,6 +95,7 @@ function App() {
             {overdueContacts.length > 0 && (
               <ContactList
                 title="🔴 Overdue"
+                onDelete={loadContacts}
                 contacts={overdueContacts}
                 count={overdueContacts.length}
               />
@@ -72,6 +107,7 @@ function App() {
                 title="🔵 Contacted"
                 contacts={contactedContacts}
                 count={contactedContacts.length}
+                onDelete={loadContacts}
               />
             )}
 
@@ -81,6 +117,7 @@ function App() {
                 title="🟡 Replied"
                 contacts={repliedContacts}
                 count={repliedContacts.length}
+                onDelete={loadContacts}
               />
             )}
 
@@ -90,6 +127,7 @@ function App() {
                 title="🟢 Meeting Booked"
                 contacts={meetingContacts}
                 count={meetingContacts.length}
+                onDelete={loadContacts}
               />
             )}
 
@@ -99,6 +137,7 @@ function App() {
                 title="⚫ Not Interested"
                 contacts={notInterestedContacts}
                 count={notInterestedContacts.length}
+                onDelete={loadContacts}
               />
             )}
           </div>

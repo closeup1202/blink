@@ -6,9 +6,10 @@ interface ContactListProps {
   title: string
   contacts: Contact[]
   count: number
+  onDelete: () => void
 }
 
-function ContactList({ title, contacts, count }: ContactListProps) {
+function ContactList({ title, contacts, count, onDelete }: ContactListProps) {
   const [isExpanded, setIsExpanded] = useState(true)
 
   return (
@@ -38,7 +39,7 @@ function ContactList({ title, contacts, count }: ContactListProps) {
       {isExpanded && (
         <div className="divide-y divide-gray-100">
           {contacts.map(contact => (
-            <ContactCard key={contact.id} contact={contact} />
+            <ContactCard key={contact.id} contact={contact} onDelete={onDelete} />
           ))}
         </div>
       )}

@@ -40,28 +40,30 @@ export function insertAfter(newElement: HTMLElement, targetSelector: string): bo
 }
 
 /**
- * 요소를 대기하여 가져오기 (최대 10초)
+ * 요소를 대기하여 가져오기 - MutationObserver 기반 (즉시 감지)
  */
-export async function waitForElement(
+export function waitForElement(
   selector: string,
   timeout = 10000
 ): Promise<Element | null> {
-  const startTime = Date.now()
+  const existing = document.querySelector(selector)
+  if (existing) return Promise.resolve(existing)
 
-  while (Date.now() - startTime < timeout) {
-    const element = document.querySelector(selector)
-    if (element) {
-      return element
-    }
-    await sleep(100)
-  }
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      observer.disconnect()
+      resolve(null)
+    }, timeout)
 
-  return null
-}
+    const observer = new MutationObserver(() => {
+      const el = document.querySelector(selector)
+      if (el) {
+        clearTimeout(timer)
+        observer.disconnect()
+        resolve(el)
+      }
+    })
 
-/**
- * 지연 함수
- */
-function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms))
+    observer.observe(document.body, { childList: true, subtree: true })
+  })
 }

@@ -16,8 +16,8 @@ export function parseProfileInfo(): ProfileInfo | null {
   try {
     const profileUrl = window.location.href
 
-    // 이름 추출
-    const nameElement = document.querySelector('h1.text-heading-xlarge')
+    // 이름 추출 (LinkedIn이 클래스명을 난독화하므로 안정적인 유틸리티 클래스 조합 사용)
+    const nameElement = document.querySelector('h1.inline.t-24') ?? document.querySelector('h1')
     const name = nameElement?.textContent?.trim() || ''
 
     // 직함 추출
