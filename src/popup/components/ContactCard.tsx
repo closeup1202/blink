@@ -12,6 +12,7 @@ function ContactCard({ contact, onDelete }: ContactCardProps) {
   const daysOverdue = getDaysOverdue(contact.nextFollowUpDate)
 
   async function handleDelete() {
+    if (!confirm(`Delete ${contact.name}?`)) return
     await storage.deleteContact(contact.id)
     onDelete()
   }

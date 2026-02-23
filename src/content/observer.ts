@@ -1,6 +1,6 @@
 /**
  * LinkedIn SPA 변화 감지 및 대응
- * MutationObserver를 사용하여 DOM 변화를 감지하고 필요한 UI를 재주입
+ * history.pushState 인터셉트 + popstate로 URL 변화 감지
  */
 
 import { createElement } from 'react'
@@ -13,22 +13,35 @@ import { storage } from '@/storage'
 let currentUrl = location.href
 let panelRoot: Root | null = null
 let searchObserver: MutationObserver | null = null
+let cachedContactMap: Map<string, import('@/types').Contact> | null = null
 
 /**
  * LinkedIn 페이지 변화 감지 시작
+ * MutationObserver 대신 history API 인터셉트 사용 (CPU 효율적)
  */
 export function observeLinkedInChanges() {
-  const observer = new MutationObserver(() => {
+  function handleUrlChange() {
     if (location.href !== currentUrl) {
       currentUrl = location.href
       onPageChange()
     }
-  })
+  }
 
-  observer.observe(document.body, {
-    childList: true,
-    subtree: true,
-  })
+  // SPA 네비게이션 감지 (LinkedIn은 pushState 사용)
+  const originalPushState = history.pushState.bind(history)
+  history.pushState = function (...args) {
+    originalPushState(...args)
+    handleUrlChange()
+  }
+
+  const originalReplaceState = history.replaceState.bind(history)
+  history.replaceState = function (...args) {
+    originalReplaceState(...args)
+    handleUrlChange()
+  }
+
+  // 브라우저 뒤로/앞으로 버튼
+  window.addEventListener('popstate', handleUrlChange)
 
   // 초기 페이지 로드
   onPageChange()
@@ -110,12 +123,16 @@ async function injectSearchBadges() {
     searchObserver = null
   }
 
+  // 검색 페이지 진입 시 contacts 캐시 갱신
+  const contacts = await storage.getAllContacts()
+  cachedContactMap = new Map(contacts.map(c => [c.id, c]))
+
   // 첫 번째 검색 결과가 나타날 때까지 대기
   const firstResult = await waitForElement('[data-view-name="people-search-result"]', 5000)
   if (!firstResult || !isSearchPage()) return
 
   // 현재 보이는 결과에 배지 주입
-  await injectBadgesIntoResults()
+  injectBadgesIntoResults()
 
   // 무한 스크롤 대응: 부모 컨테이너 관찰
   const container = firstResult.closest('ul') ?? firstResult.parentElement ?? document.body
@@ -126,13 +143,11 @@ async function injectSearchBadges() {
 }
 
 /**
- * 검색 결과 아이템에 배지 주입
+ * 검색 결과 아이템에 배지 주입 (캐시된 contactMap 사용)
  */
-async function injectBadgesIntoResults() {
-  const contacts = await storage.getAllContacts()
-  if (contacts.length === 0) return
-
-  const contactMap = new Map(contacts.map(c => [c.id, c]))
+function injectBadgesIntoResults() {
+  const contactMap = cachedContactMap
+  if (!contactMap || contactMap.size === 0) return
 
   const results = document.querySelectorAll('[data-view-name="people-search-result"]')
   for (const result of results) {

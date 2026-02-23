@@ -32,11 +32,18 @@ export function createSearchBadge(contact: Contact): HTMLElement {
   const statusLabel = overdue ? '🔴 Overdue' : `${cfg.emoji} ${cfg.label}`
   const timeLabel = `Last: ${getRelativeTime(contact.lastContactedAt)}`
 
-  badge.innerHTML = `
-    <span>${statusLabel}</span>
-    <span style="opacity:0.4">·</span>
-    <span style="opacity:0.7">${timeLabel}</span>
-  `
+  const s1 = document.createElement('span')
+  s1.textContent = statusLabel
+
+  const dot = document.createElement('span')
+  dot.textContent = '·'
+  dot.style.opacity = '0.4'
+
+  const s2 = document.createElement('span')
+  s2.textContent = timeLabel
+  s2.style.opacity = '0.7'
+
+  badge.append(s1, dot, s2)
 
   return badge
 }
