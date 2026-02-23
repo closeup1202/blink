@@ -1,4 +1,4 @@
-# Blink - LinkedIn Follow-up Chrome Extension
+# Blink - LinkedIn Simple Follow-up Chrome Extension
 
 > Never lose a deal because you forgot to follow up.
 

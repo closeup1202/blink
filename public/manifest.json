@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Blink - LinkedIn Follow-up",
+  "name": "Blink - LinkedIn Simple Follow-up",
   "version": "1.0.0",
   "description": "Never lose a deal because you forgot to follow up. Lightweight follow-up layer for LinkedIn.",
   "permissions": [
