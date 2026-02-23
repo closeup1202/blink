@@ -9,11 +9,12 @@ import { SaveLeadPanel, PANEL_ID } from './components/SaveLeadPanel'
 import { createSearchBadge, BADGE_CLASS } from './components/StatusBadge'
 import { waitForElement } from './utils/dom'
 import { storage } from '@/storage'
+import type { Contact } from '@/types'
 
 let currentUrl = location.href
 let panelRoot: Root | null = null
 let searchObserver: MutationObserver | null = null
-let cachedContactMap: Map<string, import('@/types').Contact> | null = null
+let cachedContactMap: Map<string, Contact> | null = null
 
 /**
  * LinkedIn 페이지 변화 감지 시작
@@ -51,8 +52,6 @@ export function observeLinkedInChanges() {
  * 페이지 변경 시 실행
  */
 function onPageChange() {
-  console.log('LinkedIn page changed:', currentUrl)
-
   // 검색 페이지가 아니면 검색 observer 정리
   if (!isSearchPage() && searchObserver) {
     searchObserver.disconnect()
@@ -60,12 +59,10 @@ function onPageChange() {
   }
 
   if (isProfilePage()) {
-    console.log('Profile page detected')
     injectProfilePanel()
   }
 
   if (isSearchPage()) {
-    console.log('Search page detected')
     injectSearchBadges()
   }
 }

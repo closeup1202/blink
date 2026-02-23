@@ -44,11 +44,6 @@ async function checkOverdueContacts() {
   }
 }
 
-// Extension 아이콘 클릭 시 (popup 열릴 때) overdue 체크
-chrome.action.onClicked.addListener(() => {
-  checkOverdueContacts()
-})
-
 // Storage 변경 시 overdue 체크
 chrome.storage.onChanged.addListener(() => {
   checkOverdueContacts()
