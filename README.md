@@ -69,16 +69,3 @@ The built extension will be in the `dist/` folder.
 2. Enable "Developer mode"
 3. Click "Load unpacked"
 4. Select the `dist/` folder
-
-## Roadmap
-
-- [x] Project setup
-- [ ] Profile page injection (Day 4-6)
-- [ ] Search results overlay (Day 7-9)
-- [ ] Follow-up logic & overdue detection (Day 10-12)
-- [ ] Popup UI polish (Day 13-14)
-- [ ] Chrome Web Store submission
-
-## License
-
-MIT
