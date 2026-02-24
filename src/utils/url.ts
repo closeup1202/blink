@@ -1,3 +1,5 @@
+import { logger } from './logger'
+
 /**
  * LinkedIn 프로필 URL 정규화
  * 중복 저장을 방지하기 위해 URL을 일관된 형식으로 변환
@@ -20,7 +22,7 @@ export function normalizeLinkedInProfileUrl(url: string): string {
     // 정규화된 URL 반환
     return `${urlObj.origin}${cleanPath}`
   } catch (e) {
-    console.error('Blink: Failed to normalize URL', url, e)
+    logger.error('Blink: Failed to normalize URL', url, e)
     // 실패 시 원본 URL 반환 (fallback)
     return url
   }

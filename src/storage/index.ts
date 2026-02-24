@@ -1,4 +1,5 @@
 import type { Contact, StorageData } from '@/types'
+import { logger } from '@/utils/logger'
 
 const STORAGE_KEY = 'blink_contacts'
 
@@ -42,7 +43,7 @@ export const storage = {
       const data: StorageData = result[STORAGE_KEY] || { contacts: {} }
       return Object.values(data.contacts)
     } catch (e) {
-      console.error('Blink: Failed to get contacts', e)
+      logger.error('Blink: Failed to get contacts', e)
       throw new StorageError('Failed to load contacts', e)
     }
   },
@@ -61,7 +62,7 @@ export const storage = {
       const data: StorageData = result[STORAGE_KEY] || { contacts: {} }
       return data.contacts[id] || null
     } catch (e) {
-      console.error('Blink: Failed to get contact', e)
+      logger.error('Blink: Failed to get contact', e)
       throw new StorageError('Failed to load contact', e)
     }
   },
@@ -81,7 +82,7 @@ export const storage = {
       data.contacts[contact.id] = contact
       await chrome.storage.local.set({ [STORAGE_KEY]: data })
     } catch (e) {
-      console.error('Blink: Failed to save contact', e)
+      logger.error('Blink: Failed to save contact', e)
       throw new StorageError('Failed to save contact', e)
     }
   },
@@ -101,7 +102,7 @@ export const storage = {
       delete data.contacts[id]
       await chrome.storage.local.set({ [STORAGE_KEY]: data })
     } catch (e) {
-      console.error('Blink: Failed to delete contact', e)
+      logger.error('Blink: Failed to delete contact', e)
       throw new StorageError('Failed to delete contact', e)
     }
   },
@@ -118,7 +119,7 @@ export const storage = {
     try {
       await chrome.storage.local.remove(STORAGE_KEY)
     } catch (e) {
-      console.error('Blink: Failed to clear storage', e)
+      logger.error('Blink: Failed to clear storage', e)
       throw new StorageError('Failed to clear all data', e)
     }
   },

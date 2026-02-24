@@ -14,7 +14,6 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Scrollbar 스타일 */
 ::-webkit-scrollbar {
   width: 8px;
 }

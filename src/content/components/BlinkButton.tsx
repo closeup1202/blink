@@ -12,6 +12,8 @@ export function BlinkButton() {
     <>
       <button
         onClick={() => setShowModal(true)}
+        aria-label="Save contact to Blink CRM"
+        title="Save this LinkedIn contact for follow-up"
         style={{
           display: 'inline-flex',
           alignItems: 'center',

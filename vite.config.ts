@@ -10,6 +10,9 @@ export default defineConfig({
       '@': resolve(__dirname, './src'),
     },
   },
+  define: {
+    __DEV__: JSON.stringify(process.env.NODE_ENV !== 'production'),
+  },
   build: {
     outDir: 'dist',
     rollupOptions: {

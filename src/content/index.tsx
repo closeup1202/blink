@@ -3,8 +3,9 @@
  */
 
 import { observeLinkedInChanges } from './observer'
+import { logger } from '@/utils/logger'
 
-console.log('Blink content script loaded!')
+logger.log('Blink content script loaded!')
 
 // Background script의 ping에 응답 (중복 주입 방지)
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {

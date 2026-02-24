@@ -9,8 +9,8 @@ export type FollowUpStatus =
 export interface Contact {
   id: string                 // LinkedIn profile URL (고유 키)
   name: string
-  title: string
-  company: string
+  title?: string             // Optional: LinkedIn UI 변경 시 파싱 실패 대응
+  company?: string           // Optional: LinkedIn UI 변경 시 파싱 실패 대응
   status: FollowUpStatus
   lastContactedAt: number    // timestamp (ms)
   nextFollowUpDate: number   // timestamp (ms)

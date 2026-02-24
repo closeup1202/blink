@@ -81,7 +81,7 @@ function App() {
 
   if (loading) {
     return (
-      <div className="w-[400px] h-[600px] p-4 flex items-center justify-center">
+      <div className="w-[400px] h-[600px] p-4 flex items-center justify-center" role="status" aria-live="polite">
         <p className="text-gray-500">Loading...</p>
       </div>
     )
@@ -89,7 +89,7 @@ function App() {
 
   if (error) {
     return (
-      <div className="w-[400px] h-[600px] p-4 flex flex-col items-center justify-center">
+      <div className="w-[400px] h-[600px] p-4 flex flex-col items-center justify-center" role="alert" aria-live="assertive">
         <div className="text-center">
           <p className="text-red-600 font-semibold mb-2">Error</p>
           <p className="text-sm text-gray-600 mb-4">{error}</p>
@@ -100,6 +100,7 @@ function App() {
               loadContacts()
             }}
             className="bg-linkedin text-white px-4 py-2 rounded text-sm hover:bg-linkedin/90 transition-colors"
+            aria-label="Retry loading contacts"
           >
             Retry
           </button>
@@ -121,6 +122,7 @@ function App() {
             onClick={exportCSV}
             className="text-xs bg-white/20 hover:bg-white/30 transition-colors px-3 py-1.5 rounded font-medium"
             title="Export to CSV"
+            aria-label="Export contacts to CSV"
           >
             ↓ CSV
           </button>
@@ -128,7 +130,7 @@ function App() {
       </div>
 
       {/* Content */}
-      <div className="p-4 overflow-y-auto h-[calc(100%-80px)]">
+      <div className="p-4 overflow-y-auto h-[calc(100%-80px)]" role="main" aria-label="Contact list">
         {contacts.length === 0 ? (
           <div className="text-center py-12">
             <p className="text-gray-500 mb-2">No contacts yet</p>

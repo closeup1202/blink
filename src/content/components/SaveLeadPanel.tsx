@@ -123,12 +123,14 @@ export function SaveLeadPanel() {
 
       {/* Status */}
       <div style={{ marginBottom: '10px' }}>
-        <label style={{ display: 'block', marginBottom: '4px', fontSize: '12px', color: '#666' }}>
+        <label htmlFor="blink-status-select" style={{ display: 'block', marginBottom: '4px', fontSize: '12px', color: '#666' }}>
           Status
         </label>
         <select
+          id="blink-status-select"
           value={status}
           onChange={e => setStatus(e.target.value as FollowUpStatus)}
+          aria-label="Contact status"
           style={{
             width: '100%',
             padding: '6px 8px',
@@ -148,16 +150,18 @@ export function SaveLeadPanel() {
 
       {/* Follow-up days */}
       <div style={{ marginBottom: '12px' }}>
-        <label style={{ display: 'block', marginBottom: '4px', fontSize: '12px', color: '#666' }}>
+        <label htmlFor="blink-followup-days" style={{ display: 'block', marginBottom: '4px', fontSize: '12px', color: '#666' }}>
           Follow up in
         </label>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <input
+            id="blink-followup-days"
             type="number"
             min={1}
             max={90}
             value={followUpDays}
             onChange={e => setFollowUpDays(Number(e.target.value))}
+            aria-label="Follow-up days"
             style={{
               width: '60px',
               padding: '6px 8px',
@@ -173,14 +177,16 @@ export function SaveLeadPanel() {
 
       {/* Notes */}
       <div style={{ marginBottom: '12px' }}>
-        <label style={{ display: 'block', marginBottom: '4px', fontSize: '12px', color: '#666' }}>
+        <label htmlFor="blink-notes" style={{ display: 'block', marginBottom: '4px', fontSize: '12px', color: '#666' }}>
           Notes
         </label>
         <textarea
+          id="blink-notes"
           value={memo}
           onChange={e => setMemo(e.target.value)}
           placeholder="Add a note..."
           rows={2}
+          aria-label="Contact notes"
           style={{
             width: '100%',
             padding: '6px 8px',
@@ -197,7 +203,7 @@ export function SaveLeadPanel() {
 
       {/* Error message */}
       {error && (
-        <div style={{
+        <div role="alert" aria-live="assertive" style={{
           padding: '8px',
           marginBottom: '10px',
           background: '#fee',
@@ -214,6 +220,8 @@ export function SaveLeadPanel() {
       <button
         onClick={handleSave}
         disabled={saving}
+        aria-label={saved ? 'Contact saved' : saving ? 'Saving contact' : existing ? 'Update lead information' : 'Save lead information'}
+        aria-busy={saving}
         style={{
           width: '100%',
           padding: '8px',

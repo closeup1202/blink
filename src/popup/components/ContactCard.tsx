@@ -25,7 +25,7 @@ function ContactCard({ contact, onDelete }: ContactCardProps) {
   }
 
   return (
-    <div className="p-3 hover:bg-gray-50 transition-colors">
+    <div className="p-3 hover:bg-gray-50 transition-colors" role="article" aria-label={`Contact: ${contact.name}`}>
       {/* Name & Company */}
       <div className="flex items-center justify-between mb-1">
         <a
@@ -33,6 +33,7 @@ function ContactCard({ contact, onDelete }: ContactCardProps) {
           target="_blank"
           rel="noopener noreferrer"
           className="font-semibold text-sm text-linkedin hover:underline"
+          aria-label={`View ${contact.name}'s LinkedIn profile`}
         >
           {contact.name}
         </a>
@@ -40,6 +41,7 @@ function ContactCard({ contact, onDelete }: ContactCardProps) {
           onClick={handleDelete}
           className="text-gray-300 hover:text-red-500 transition-colors text-xs px-1"
           title="Delete"
+          aria-label={`Delete ${contact.name}`}
         >
           ✕
         </button>

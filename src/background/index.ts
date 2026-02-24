@@ -6,10 +6,11 @@
 
 import { storage } from '@/storage'
 import { isOverdue } from '@/utils/date'
+import { logger } from '@/utils/logger'
 
 // Extension 설치 또는 업데이트 시
 chrome.runtime.onInstalled.addListener(async (details) => {
-  console.log('Blink installed!')
+  logger.log('Blink installed!')
 
   // 1시간마다 overdue 체크하는 알람 설정
   chrome.alarms.create('checkOverdue', {
@@ -45,14 +46,14 @@ async function injectContentScriptToExistingTabs() {
             target: { tabId: tab.id },
             files: ['content.js']
           })
-          console.log(`Blink: Injected into tab ${tab.id}`)
+          logger.log(`Blink: Injected into tab ${tab.id}`)
         } catch (err) {
-          console.warn(`Blink: Failed to inject into tab ${tab.id}:`, err)
+          logger.warn(`Blink: Failed to inject into tab ${tab.id}:`, err)
         }
       }
     }
   } catch (err) {
-    console.error('Blink: Failed to inject content scripts:', err)
+    logger.error('Blink: Failed to inject content scripts:', err)
   }
 }
 
@@ -65,20 +66,26 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 
 // Overdue 연락처 체크
 async function checkOverdueContacts() {
-  const contacts = await storage.getAllContacts()
-  const overdueContacts = contacts.filter(contact =>
-    isOverdue(contact.nextFollowUpDate) && contact.status !== 'not_interested'
-  )
+  try {
+    const contacts = await storage.getAllContacts()
+    const overdueContacts = contacts.filter(contact =>
+      isOverdue(contact.nextFollowUpDate) && contact.status !== 'not_interested'
+    )
 
-  if (overdueContacts.length > 0) {
-    // 배지에 overdue 개수 표시
-    chrome.action.setBadgeText({
-      text: String(overdueContacts.length)
-    })
-    chrome.action.setBadgeBackgroundColor({
-      color: '#CC1016'
-    })
-  } else {
+    if (overdueContacts.length > 0) {
+      // 배지에 overdue 개수 표시
+      chrome.action.setBadgeText({
+        text: String(overdueContacts.length)
+      })
+      chrome.action.setBadgeBackgroundColor({
+        color: '#CC1016'
+      })
+    } else {
+      chrome.action.setBadgeText({ text: '' })
+    }
+  } catch (err) {
+    logger.error('Blink: Failed to check overdue contacts:', err)
+    // 에러 시 배지 초기화
     chrome.action.setBadgeText({ text: '' })
   }
 }

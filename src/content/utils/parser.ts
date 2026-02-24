@@ -2,10 +2,12 @@
  * LinkedIn 프로필 정보 파싱 유틸리티
  */
 
+import { logger } from '@/utils/logger'
+
 export interface ProfileInfo {
   name: string
-  title: string
-  company: string
+  title?: string   // Optional: LinkedIn UI 변경 시 파싱 실패 가능
+  company?: string // Optional: LinkedIn UI 변경 시 파싱 실패 가능
   profileUrl: string
 }
 
@@ -19,7 +21,7 @@ export function parseProfileInfo(): ProfileInfo | null {
     // 이름 추출 - 다중 fallback으로 안정성 향상
     const name = extractName()
     if (!name) {
-      console.warn('Blink: Could not extract profile name')
+      logger.warn('Blink: Could not extract profile name')
       return null
     }
 
@@ -32,12 +34,12 @@ export function parseProfileInfo(): ProfileInfo | null {
 
     return {
       name,
-      title,
-      company,
+      title: title || undefined,
+      company: company || undefined,
       profileUrl,
     }
   } catch (error) {
-    console.error('Failed to parse profile info:', error)
+    logger.error('Failed to parse profile info:', error)
     return null
   }
 }

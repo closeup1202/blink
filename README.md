@@ -6,10 +6,10 @@ A lightweight Chrome Extension that helps you manage LinkedIn follow-ups without
 
 ## Features
 
-- 🔵 **Status Management** - Track contacts (Contacted, Replied, Meeting Booked, Not Interested)
-- ⏰ **Follow-up Reminders** - Never forget to follow up again
-- 🎯 **Search Overlay** - See contact status directly in LinkedIn search results
-- 💾 **Local Storage** - All data stored locally, no external servers
+- **Status Management** - Track contacts (Contacted, Replied, Meeting Booked, Not Interested)
+- **Follow-up Reminders** - Never forget to follow up again
+- **Search Overlay** - See contact status directly in LinkedIn search results
+- **Local Storage** - All data stored locally, no external servers
 
 ## Tech Stack
 

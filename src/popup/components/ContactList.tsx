@@ -18,10 +18,12 @@ function ContactList({ title, contacts, count, onDelete }: ContactListProps) {
       <button
         onClick={() => setIsExpanded(!isExpanded)}
         className="w-full flex items-center justify-between p-3 bg-gray-50 hover:bg-gray-100 transition-colors"
+        aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${title} section with ${count} contact${count !== 1 ? 's' : ''}`}
+        aria-expanded={isExpanded}
       >
         <span className="font-semibold text-sm">{title}</span>
         <div className="flex items-center gap-2">
-          <span className="bg-white px-2 py-0.5 rounded text-xs font-medium">
+          <span className="bg-white px-2 py-0.5 rounded text-xs font-medium" aria-label={`${count} contact${count !== 1 ? 's' : ''}`}>
             {count}
           </span>
           <svg
@@ -29,6 +31,7 @@ function ContactList({ title, contacts, count, onDelete }: ContactListProps) {
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
+            aria-hidden="true"
           >
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
           </svg>
