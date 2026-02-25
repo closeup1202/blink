@@ -19,6 +19,8 @@ let cachedContactMap: Map<string, Contact> | null = null
 let urlPollingInterval: number | null = null
 let popstateHandler: (() => void) | null = null
 let buttonInjectionTimer: number | null = null // 버튼 재시도 타이머
+let badgeDebounceTimer: number | null = null
+let visibilityChangeHandler: (() => void) | null = null
 
 /**
  * LinkedIn 페이지 변화 감지 시작
@@ -64,8 +66,26 @@ export function observeLinkedInChanges() {
   }
   urlPollingInterval = window.setInterval(() => {
     handleUrlChange()
-  }, 1000) // 1000ms 간격 (배터리 및 CPU 효율성 개선)
-  logger.log('Blink: URL polling started (1000ms interval)')
+  }, 5000) // 5000ms 폴백 - history API/popstate가 대부분 처리
+  logger.log('Blink: URL polling started (5000ms fallback interval)')
+
+  // 탭이 숨겨질 때 폴링 일시 중단, 표시될 때 재개 (배터리/CPU 절약)
+  visibilityChangeHandler = () => {
+    if (document.hidden) {
+      if (urlPollingInterval) {
+        clearInterval(urlPollingInterval)
+        urlPollingInterval = null
+        logger.log('Blink: URL polling paused (tab hidden)')
+      }
+    } else {
+      handleUrlChange()
+      if (!urlPollingInterval) {
+        urlPollingInterval = window.setInterval(handleUrlChange, 5000)
+        logger.log('Blink: URL polling resumed (tab visible)')
+      }
+    }
+  }
+  document.addEventListener('visibilitychange', visibilityChangeHandler)
 
   // 초기 페이지 로드 - 현재 URL 동기화
   currentUrl = location.href
@@ -139,6 +159,18 @@ function cleanup() {
     searchObserver.disconnect()
     searchObserver = null
     logger.log('Blink: Search observer disconnected')
+  }
+
+  // 배지 디바운스 타이머 정리
+  if (badgeDebounceTimer) {
+    clearTimeout(badgeDebounceTimer)
+    badgeDebounceTimer = null
+  }
+
+  // visibilitychange 이벤트 리스너 제거
+  if (visibilityChangeHandler) {
+    document.removeEventListener('visibilitychange', visibilityChangeHandler)
+    visibilityChangeHandler = null
   }
 
   // 캐시 정리
@@ -402,7 +434,11 @@ async function injectSearchBadges() {
   // 무한 스크롤 대응: 부모 컨테이너 관찰
   const container = firstResult.closest('ul') ?? firstResult.parentElement ?? document.body
   searchObserver = new MutationObserver(() => {
-    injectBadgesIntoResults()
+    if (badgeDebounceTimer) clearTimeout(badgeDebounceTimer)
+    badgeDebounceTimer = window.setTimeout(() => {
+      badgeDebounceTimer = null
+      injectBadgesIntoResults()
+    }, 150)
   })
   searchObserver.observe(container, { childList: true, subtree: true })
 }

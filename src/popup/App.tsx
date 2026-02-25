@@ -2,12 +2,14 @@ import { useEffect, useState } from 'react'
 import { storage } from '@/storage'
 import type { Contact } from '@/types'
 import ContactList from './components/ContactList'
+import ContactCard from './components/ContactCard'
 import { isOverdue } from '@/utils/date'
 
 function App() {
   const [contacts, setContacts] = useState<Contact[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [query, setQuery] = useState('')
 
   useEffect(() => {
     loadContacts()
@@ -72,7 +74,17 @@ function App() {
     }
   }
 
-  // 상태별로 그룹화
+  // 검색 필터링
+  const trimmedQuery = query.trim().toLowerCase()
+  const searchedContacts = trimmedQuery
+    ? contacts.filter(c =>
+        c.name.toLowerCase().includes(trimmedQuery) ||
+        (c.company ?? '').toLowerCase().includes(trimmedQuery) ||
+        (c.title ?? '').toLowerCase().includes(trimmedQuery)
+      )
+    : null // null = 그룹 뷰 유지
+
+  // 상태별로 그룹화 (검색 중이 아닐 때)
   const overdueContacts = contacts.filter(c => isOverdue(c.nextFollowUpDate) && c.status !== 'not_interested')
   const contactedContacts = contacts.filter(c => c.status === 'contacted' && !isOverdue(c.nextFollowUpDate))
   const repliedContacts = contacts.filter(c => c.status === 'replied')
@@ -110,9 +122,9 @@ function App() {
   }
 
   return (
-    <div className="w-[400px] h-[600px] bg-white">
+    <div className="w-[400px] h-[600px] bg-white flex flex-col">
       {/* Header */}
-      <div className="bg-linkedin text-white p-4 flex items-center justify-between">
+      <div className="bg-linkedin text-white p-4 flex items-center justify-between flex-shrink-0">
         <div>
           <h1 className="text-xl font-bold">Blink</h1>
           <p className="text-sm opacity-90">LinkedIn Follow-up</p>
@@ -129,8 +141,22 @@ function App() {
         )}
       </div>
 
+      {/* Search bar - 연락처가 있을 때만 표시 */}
+      {contacts.length > 0 && (
+        <div className="px-4 py-2 border-b border-gray-100 flex-shrink-0">
+          <input
+            type="search"
+            placeholder="Search by name, company, or title..."
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            className="w-full text-sm border border-gray-200 rounded-md px-3 py-1.5 outline-none focus:border-linkedin transition-colors"
+            aria-label="Search contacts"
+          />
+        </div>
+      )}
+
       {/* Content */}
-      <div className="p-4 overflow-y-auto h-[calc(100%-80px)]" role="main" aria-label="Contact list">
+      <div className="flex-1 overflow-y-auto p-4" role="main" aria-label="Contact list">
         {contacts.length === 0 ? (
           <div className="text-center py-12">
             <p className="text-gray-500 mb-2">No contacts yet</p>
@@ -138,9 +164,27 @@ function App() {
               Visit a LinkedIn profile to save your first lead
             </p>
           </div>
+        ) : searchedContacts !== null ? (
+          /* 검색 결과 뷰 */
+          searchedContacts.length === 0 ? (
+            <div className="text-center py-8">
+              <p className="text-sm text-gray-400">No results for &ldquo;{query}&rdquo;</p>
+            </div>
+          ) : (
+            <div>
+              <p className="text-xs text-gray-400 mb-3">
+                {searchedContacts.length} result{searchedContacts.length !== 1 ? 's' : ''}
+              </p>
+              <div className="border border-gray-200 rounded-lg divide-y divide-gray-100 overflow-hidden">
+                {searchedContacts.map(contact => (
+                  <ContactCard key={contact.id} contact={contact} onDelete={loadContacts} />
+                ))}
+              </div>
+            </div>
+          )
         ) : (
+          /* 그룹 뷰 */
           <div className="space-y-4">
-            {/* Overdue */}
             {overdueContacts.length > 0 && (
               <ContactList
                 title="🔴 Overdue"
@@ -149,8 +193,6 @@ function App() {
                 count={overdueContacts.length}
               />
             )}
-
-            {/* Contacted */}
             {contactedContacts.length > 0 && (
               <ContactList
                 title="🔵 Contacted"
@@ -159,8 +201,6 @@ function App() {
                 onDelete={loadContacts}
               />
             )}
-
-            {/* Replied */}
             {repliedContacts.length > 0 && (
               <ContactList
                 title="🟡 Replied"
@@ -169,8 +209,6 @@ function App() {
                 onDelete={loadContacts}
               />
             )}
-
-            {/* Meeting Booked */}
             {meetingContacts.length > 0 && (
               <ContactList
                 title="🟢 Meeting Booked"
@@ -179,8 +217,6 @@ function App() {
                 onDelete={loadContacts}
               />
             )}
-
-            {/* Not Interested */}
             {notInterestedContacts.length > 0 && (
               <ContactList
                 title="⚫ Not Interested"

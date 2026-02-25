@@ -1,7 +1,7 @@
-import { useState } from 'react'
-import { createElement } from 'react'
+import { useState, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { SaveLeadModal } from './SaveLeadModal'
+import { ErrorBoundary } from '@/components/ErrorBoundary'
 
 export const BUTTON_ID = 'blink-action-button'
 
@@ -62,7 +62,7 @@ export function createBlinkButton(): { button: HTMLElement; root: Root } {
   container.style.marginLeft = '2px'
 
   const root = createRoot(container)
-  root.render(createElement(BlinkButton))
+  root.render(createElement(ErrorBoundary, { fallback: null, children: createElement(BlinkButton) }))
 
   return { button: container, root }
 }

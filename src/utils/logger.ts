@@ -1,3 +1,4 @@
+/* eslint-disable no-console, @typescript-eslint/no-explicit-any */
 /**
  * Production-safe logger utility
  * - Development: 모든 로그 출력
