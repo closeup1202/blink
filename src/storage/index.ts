@@ -69,6 +69,7 @@ export const storage = {
 
   /**
    * 연락처 저장 또는 업데이트
+   * Background service worker를 통해 원자적으로 처리 (동시 쓰기 race condition 방지)
    * @throws {StorageError} 익스텐션 컨텍스트가 무효하거나 storage 접근 실패 시
    */
   async saveContact(contact: Contact): Promise<void> {
@@ -77,11 +78,15 @@ export const storage = {
     }
 
     try {
-      const result = await chrome.storage.local.get(STORAGE_KEY)
-      const data: StorageData = result[STORAGE_KEY] || { contacts: {} }
-      data.contacts[contact.id] = contact
-      await chrome.storage.local.set({ [STORAGE_KEY]: data })
+      const response = await chrome.runtime.sendMessage({
+        type: 'STORAGE_WRITE',
+        op: 'save',
+        contact,
+      }) as { ok?: boolean; error?: string } | undefined
+
+      if (response?.error) throw new Error(response.error)
     } catch (e) {
+      if (e instanceof StorageError) throw e
       logger.error('Blink: Failed to save contact', e)
       throw new StorageError('Failed to save contact', e)
     }
@@ -89,6 +94,7 @@ export const storage = {
 
   /**
    * 연락처 삭제
+   * Background service worker를 통해 원자적으로 처리
    * @throws {StorageError} 익스텐션 컨텍스트가 무효하거나 storage 접근 실패 시
    */
   async deleteContact(id: string): Promise<void> {
@@ -97,11 +103,15 @@ export const storage = {
     }
 
     try {
-      const result = await chrome.storage.local.get(STORAGE_KEY)
-      const data: StorageData = result[STORAGE_KEY] || { contacts: {} }
-      delete data.contacts[id]
-      await chrome.storage.local.set({ [STORAGE_KEY]: data })
+      const response = await chrome.runtime.sendMessage({
+        type: 'STORAGE_WRITE',
+        op: 'delete',
+        id,
+      }) as { ok?: boolean; error?: string } | undefined
+
+      if (response?.error) throw new Error(response.error)
     } catch (e) {
+      if (e instanceof StorageError) throw e
       logger.error('Blink: Failed to delete contact', e)
       throw new StorageError('Failed to delete contact', e)
     }
@@ -117,8 +127,14 @@ export const storage = {
     }
 
     try {
-      await chrome.storage.local.remove(STORAGE_KEY)
+      const response = await chrome.runtime.sendMessage({
+        type: 'STORAGE_WRITE',
+        op: 'clear',
+      }) as { ok?: boolean; error?: string } | undefined
+
+      if (response?.error) throw new Error(response.error)
     } catch (e) {
+      if (e instanceof StorageError) throw e
       logger.error('Blink: Failed to clear storage', e)
       throw new StorageError('Failed to clear all data', e)
     }

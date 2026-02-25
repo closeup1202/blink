@@ -18,8 +18,11 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 // LinkedIn SPA 변화 감지 시작
 observeLinkedInChanges()
 
-// CSS 주입
+// CSS 주입 (중복 방지: 이미 주입된 경우 건너뜀)
+const STYLE_ID = 'blink-content-styles'
+if (!document.getElementById(STYLE_ID)) {
 const style = document.createElement('style')
+style.id = STYLE_ID
 style.textContent = `
   .blink-badge {
     display: inline-flex;
@@ -44,3 +47,4 @@ style.textContent = `
   }
 `
 document.head.appendChild(style)
+}

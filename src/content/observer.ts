@@ -21,6 +21,8 @@ let popstateHandler: (() => void) | null = null
 let buttonInjectionTimer: number | null = null // 버튼 재시도 타이머
 let badgeDebounceTimer: number | null = null
 let visibilityChangeHandler: (() => void) | null = null
+let isInjectingButton = false  // 동시 주입 방지 플래그
+let isInjectingBadges = false  // 동시 배지 주입 방지 플래그
 
 /**
  * LinkedIn 페이지 변화 감지 시작
@@ -173,6 +175,10 @@ function cleanup() {
     visibilityChangeHandler = null
   }
 
+  // 주입 플래그 초기화
+  isInjectingButton = false
+  isInjectingBadges = false
+
   // 캐시 정리
   cachedContactMap = null
 }
@@ -218,8 +224,12 @@ function onPageChange() {
 }
 
 function isProfilePage(): boolean {
-  const url = location.href
-  return /linkedin\.com\/in\/[^/]+\/?/.test(url)
+  try {
+    const { hostname, pathname } = new URL(location.href)
+    return hostname.includes('linkedin.com') && /^\/in\/[\w-]+/.test(pathname)
+  } catch {
+    return false
+  }
 }
 
 function isSearchPage(): boolean {
@@ -227,186 +237,156 @@ function isSearchPage(): boolean {
   return url.includes('/search/results/people/')
 }
 
-/**
- * More 버튼을 찾지 못했을 때 대체 위치 찾기
- * LinkedIn 프로필 헤더의 다른 버튼들을 찾아서 그 옆에 주입
- */
-async function findFallbackButtonLocation(): Promise<Element | null> {
-  // 프로필 헤더의 다른 버튼들을 찾아본다
-  const fallbackSelectors = [
-    'button[aria-label*="Message"]',
-    'button[aria-label*="메시지"]',
-    'button[aria-label*="Connect"]',
-    'button[aria-label*="연결"]',
-    'button[aria-label*="Follow"]',
-    'button[aria-label*="팔로우"]',
-    // 프로필 카드의 버튼 컨테이너
-    '.pvs-profile-actions button',
-    'div.display-flex.gap-2 button',
-  ]
 
-  for (const selector of fallbackSelectors) {
-    const element = await waitForElement(selector, 2000)
-    if (element) {
-      logger.log(`Blink: Found fallback button with selector: ${selector}`)
-      return element
+/**
+ * 요소가 sticky/fixed 헤더 안에 있는지 확인
+ */
+function isStickyElement(el: Element): boolean {
+  let parent = el.parentElement
+  for (let i = 0; i < 10 && parent; i++) {
+    const style = window.getComputedStyle(parent)
+    if (
+      (style.position === 'fixed' || style.position === 'sticky') &&
+      parseInt(style.top || '0') < 100
+    ) {
+      return true
     }
+    parent = parent.parentElement
   }
+  return false
+}
+
+/**
+ * 유효한 프로필 액션 컨테이너 후보인지 검증
+ * - sticky/fixed 헤더 제외
+ * - 검색 결과 카드 내부 제외
+ */
+function isValidProfileEl(el: Element): boolean {
+  return !isStickyElement(el) && !el.closest('[data-view-name="people-search-result"]')
+}
+
+/**
+ * 현재 DOM에서 non-sticky 프로필 액션 컨테이너를 탐색
+ *
+ * 1차: .pvs-profile-actions__custom
+ * 2차: [id$="-profile-overflow-action"] More 버튼 → 부모
+ * 3차: aria-label="More actions" 버튼 → 부모
+ * 4차: Follow/Connect/Message 버튼 → 부모 (레이아웃 최소 프로필 대응)
+ */
+function findActionsContainer(): HTMLElement | null {
+  // 1차
+  const validCustom = Array.from(document.querySelectorAll('.pvs-profile-actions__custom'))
+    .find(isValidProfileEl)
+  if (validCustom) return validCustom as HTMLElement
+
+  // 2차
+  const validOverflowById = Array.from(document.querySelectorAll('[id$="-profile-overflow-action"]'))
+    .find(isValidProfileEl)
+  if (validOverflowById) {
+    return (validOverflowById.closest('.artdeco-dropdown')?.parentElement as HTMLElement) ?? null
+  }
+
+  // 3차
+  const validMoreBtn = Array.from(document.querySelectorAll('button[aria-label="More actions"]'))
+    .find(isValidProfileEl)
+  if (validMoreBtn) {
+    return (validMoreBtn.closest('.artdeco-dropdown')?.parentElement as HTMLElement) ?? null
+  }
+
+  // 4차: 기본 액션 버튼 → 부모 컨테이너
+  const actionBtnSelector = [
+    'button[aria-label*="Follow"]', 'button[aria-label*="팔로우"]',
+    'button[aria-label*="Connect"]', 'button[aria-label*="연결"]',
+    'button[aria-label*="Message"]', 'button[aria-label*="메시지"]',
+  ].join(', ')
+  const validActionBtn = Array.from(document.querySelectorAll(actionBtnSelector))
+    .find(isValidProfileEl)
+  if (validActionBtn?.parentElement) return validActionBtn.parentElement as HTMLElement
 
   return null
 }
 
 /**
- * 프로필 페이지에 Blink 버튼 주입 (상단 프로필 카드만, sticky header 제외)
+ * 프로필 액션 컨테이너가 나타날 때까지 대기
+ *
+ * MutationObserver(childList + attributes) + 300ms 폴링 조합.
+ * LinkedIn이 노드 추가 대신 visibility/class 토글로 전환하는 경우도 감지.
+ */
+function waitForProfileActionsContainer(timeoutMs: number): Promise<HTMLElement | null> {
+  const immediate = findActionsContainer()
+  if (immediate) return Promise.resolve(immediate)
+
+  return new Promise(resolve => {
+    let done = false
+
+    const finish = (result: HTMLElement | null) => {
+      if (done) return
+      done = true
+      clearInterval(pollId)
+      clearTimeout(timerId)
+      observer.disconnect()
+      resolve(result)
+    }
+
+    const check = () => {
+      if (!isProfilePage()) { finish(null); return }
+      const container = findActionsContainer()
+      if (container) finish(container)
+    }
+
+    const pollId = window.setInterval(check, 300)
+    const timerId = window.setTimeout(() => finish(null), timeoutMs)
+    const observer = new MutationObserver(check)
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['class', 'style', 'hidden'],
+    })
+  })
+}
+
+/**
+ * 프로필 페이지에 Blink 버튼 주입
  */
 async function injectBlinkButton() {
-  logger.log('Blink: Attempting to inject button on profile page')
-
-  // 기존 버튼들 언마운트 후 제거 (race condition 방지)
-  const rootsToUnmount = [...buttonRoots]
-  buttonRoots = []
-
-  rootsToUnmount.forEach(root => {
-    try {
-      root.unmount()
-    } catch (e) {
-      logger.warn('Blink: Failed to unmount button root', e)
-    }
-  })
-
-  // unmount 완료 후 DOM 제거
-  const existingButtons = document.querySelectorAll(`[id^="${BUTTON_ID}"]`)
-  existingButtons.forEach(el => el.remove())
-
-  if (existingButtons.length > 0) {
-    logger.log(`Blink: Removed ${existingButtons.length} existing button(s)`)
+  if (isInjectingButton) {
+    logger.log('Blink: Button injection already in progress, skipping')
+    return
   }
+  isInjectingButton = true
+  try {
+    logger.log('Blink: Attempting to inject button on profile page')
 
-  // 디버깅: 페이지의 모든 버튼 aria-label 확인
-  const allButtons = Array.from(document.querySelectorAll('button[aria-label]'))
-  if (allButtons.length > 0) {
-    logger.log('Blink: Found buttons with aria-labels:',
-      allButtons.slice(0, 10).map(b => b.getAttribute('aria-label')))
-  }
+    // 기존 버튼 정리
+    const rootsToUnmount = [...buttonRoots]
+    buttonRoots = []
+    rootsToUnmount.forEach(root => {
+      try { root.unmount() } catch (e) { logger.warn('Blink: Failed to unmount', e) }
+    })
+    document.querySelectorAll(`[id^="${BUTTON_ID}"]`).forEach(el => el.remove())
 
-  // More 버튼 찾기 (여러 selector 시도)
-  const moreButtonSelectors = [
-    'button[aria-label*="More"]',
-    'button[aria-label*="more"]',
-    'button[aria-label*="추가"]', // 한국어 "추가 작업"
-    'button[aria-label*="기타"]', // 한국어 대체 버전
-    'button[aria-label*="더 보기"]', // 한국어 "더 보기"
-  ]
+    const actionsContainer = await waitForProfileActionsContainer(8000)
 
-  // 첫 번째 More 버튼이 나타날 때까지 대기 (timeout 증가)
-  let foundSelector = ''
-  for (const selector of moreButtonSelectors) {
-    const btn = await waitForElement(selector, 5000) // 1s → 5s 증가
-    if (btn) {
-      foundSelector = selector
-      logger.log(`Blink: Found More button(s) with selector: ${selector}`)
-      break
-    }
-  }
-
-  if (!foundSelector) {
-    logger.warn('Blink: More button not found after 5s timeout')
-
-    // 중복 주입 방지: 버튼이 이미 존재하는지 확인
-    const alreadyInjectedCheck = document.querySelectorAll(`[id^="${BUTTON_ID}"]`)
-    if (alreadyInjectedCheck.length > 0) {
-      logger.warn(`Blink: Button already exists (${alreadyInjectedCheck.length} found), skipping fallback`)
+    if (!actionsContainer || !isProfilePage()) {
+      logger.warn('Blink: Profile actions container not found')
       return
     }
 
-    // 대체 전략: 프로필 헤더의 버튼 그룹 찾기
-    const fallbackButton = await findFallbackButtonLocation()
-    if (fallbackButton) {
-      logger.log('Blink: Using fallback button location')
-
-      // 다시 한 번 중복 확인 (비동기 대기 후)
-      const alreadyInjected2 = document.querySelectorAll(`[id^="${BUTTON_ID}"]`)
-      if (alreadyInjected2.length > 0) {
-        logger.warn(`Blink: Button injected during fallback wait, aborting`)
-        return
-      }
-
-      const { button, root } = createBlinkButton()
-      button.id = BUTTON_ID
-      fallbackButton.parentElement?.insertBefore(button, fallbackButton)
-      buttonRoots.push(root)
-      logger.log('Blink: Button injected using fallback method')
-    } else {
-      logger.warn('Blink: Fallback button location also not found')
-    }
-    return
-  }
-
-  // 모든 More 버튼 찾기
-  const allMoreButtons = Array.from(document.querySelectorAll(foundSelector))
-  logger.log(`Blink: Found ${allMoreButtons.length} More button(s) total`)
-
-  // Sticky가 아닌 버튼 찾기
-  let profileCardButton: Element | null = null
-
-  for (const moreButton of allMoreButtons) {
-    // Sticky header의 버튼인지 확인
-    let parent = moreButton.parentElement
-    let isSticky = false
-
-    for (let i = 0; i < 10 && parent; i++) {
-      const style = window.getComputedStyle(parent)
-      if (style.position === 'fixed' || style.position === 'sticky') {
-        const top = parseInt(style.top || '0')
-        if (top < 100) {
-          isSticky = true
-          logger.log('Blink: Skipping sticky header button')
-          break
-        }
-      }
-      parent = parent.parentElement
+    // 중복 주입 최종 방어
+    if (document.querySelector(`[id^="${BUTTON_ID}"]`)) {
+      logger.warn('Blink: Button already exists, skipping injection')
+      return
     }
 
-    if (!isSticky) {
-      profileCardButton = moreButton
-      logger.log('Blink: Found profile card More button (non-sticky)')
-      break
-    }
-  }
+    const { button, root } = createBlinkButton()
+    button.id = BUTTON_ID
 
-  if (!profileCardButton) {
-    logger.warn('Blink: Only found sticky header buttons, profile card button not available')
-    return
-  }
-
-  // More 버튼을 찾았으면 옆에 Blink 버튼 추가
-  if (!isProfilePage()) {
-    logger.log('Blink: Page changed during injection, aborting')
-    return
-  }
-
-  // 중복 주입 최종 방어: 버튼이 이미 존재하는지 확인
-  const alreadyInjected = document.querySelectorAll(`[id^="${BUTTON_ID}"]`)
-  if (alreadyInjected.length > 0) {
-    logger.warn(`Blink: Button already exists (${alreadyInjected.length} found), skipping injection`)
-    return
-  }
-
-  const { button, root } = createBlinkButton()
-  button.id = BUTTON_ID
-
-  profileCardButton.parentElement?.insertBefore(button, profileCardButton.nextSibling)
-  buttonRoots.push(root)
-  logger.log('Blink: Button injected next to More button in profile card')
-
-  // 주입 후 검증
-  const finalCheck = document.querySelectorAll(`[id^="${BUTTON_ID}"]`)
-  if (finalCheck.length > 1) {
-    logger.error(`Blink: Duplicate buttons detected! Found ${finalCheck.length} buttons`)
-    // 첫 번째 제외하고 모두 제거
-    finalCheck.forEach((btn, idx) => {
-      if (idx > 0) btn.remove()
-    })
+    actionsContainer.appendChild(button)
+    logger.log('Blink: Button injected into profile actions container')
+    buttonRoots.push(root)
+  } finally {
+    isInjectingButton = false
   }
 }
 
@@ -414,6 +394,9 @@ async function injectBlinkButton() {
  * 검색 결과에 상태 배지 주입
  */
 async function injectSearchBadges() {
+  if (isInjectingBadges) return
+  isInjectingBadges = true
+  try {
   // 이전 검색 페이지 observer 정리
   if (searchObserver) {
     searchObserver.disconnect()
@@ -426,7 +409,7 @@ async function injectSearchBadges() {
 
   // 첫 번째 검색 결과가 나타날 때까지 대기
   const firstResult = await waitForElement('[data-view-name="people-search-result"]', 5000)
-  if (!firstResult || !isSearchPage()) return
+  if (!firstResult || !isSearchPage()) return // finally 블록에서 isInjectingBadges = false 처리됨
 
   // 현재 보이는 결과에 배지 주입
   injectBadgesIntoResults()
@@ -441,6 +424,9 @@ async function injectSearchBadges() {
     }, 150)
   })
   searchObserver.observe(container, { childList: true, subtree: true })
+  } finally {
+    isInjectingBadges = false
+  }
 }
 
 /**

@@ -12,7 +12,7 @@ function App() {
   const [query, setQuery] = useState('')
 
   useEffect(() => {
-    loadContacts()
+    void loadContacts()
   }, [])
 
   async function loadContacts() {

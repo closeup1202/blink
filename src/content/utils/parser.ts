@@ -28,10 +28,6 @@ export function parseProfileInfo(): ProfileInfo | null {
     // 직함 및 회사 추출
     const { title, company } = extractTitleAndCompany()
 
-    if (!profileUrl) {
-      return null
-    }
-
     return {
       name,
       title: title || undefined,

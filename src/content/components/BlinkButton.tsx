@@ -1,4 +1,4 @@
-import { useState, createElement } from 'react'
+import { useState, useCallback, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { SaveLeadModal } from './SaveLeadModal'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
@@ -7,6 +7,7 @@ export const BUTTON_ID = 'blink-action-button'
 
 export function BlinkButton() {
   const [showModal, setShowModal] = useState(false)
+  const handleModalClose = useCallback(() => setShowModal(false), [])
 
   return (
     <>
@@ -46,7 +47,7 @@ export function BlinkButton() {
         Blink
       </button>
       {showModal && (
-        <SaveLeadModal onClose={() => setShowModal(false)} />
+        <SaveLeadModal onClose={handleModalClose} />
       )}
     </>
   )
@@ -58,8 +59,9 @@ export function BlinkButton() {
 export function createBlinkButton(): { button: HTMLElement; root: Root } {
   const container = document.createElement('div')
   container.id = BUTTON_ID
-  container.style.display = 'inline-block'
-  container.style.marginLeft = '2px'
+  // flex item으로 동작하도록 — LinkedIn 액션 버튼 컨테이너(flex)에 맞게 정렬
+  container.style.display = 'inline-flex'
+  container.style.alignItems = 'center'
 
   const root = createRoot(container)
   root.render(createElement(ErrorBoundary, { fallback: null, children: createElement(BlinkButton) }))

@@ -18,7 +18,10 @@
       "Bash(cd /c/Users/김건홍/Desktop/workspace/blink && npm install -D eslint@^9 @eslint/js typescript-eslint eslint-plugin-react-hooks prettier eslint-config-prettier 2>&1)",
       "Bash(cd /c/Users/김건홍/Desktop/workspace/blink && npm install -D eslint@9 @eslint/js@9 typescript-eslint eslint-plugin-react-hooks prettier eslint-config-prettier 2>&1)",
       "Bash(cd /c/Users/김건홍/Desktop/workspace/blink && npx tsc --noEmit 2>&1)",
-      "Bash(cd /c/Users/김건홍/Desktop/workspace/blink && npm run lint 2>&1)"
+      "Bash(cd /c/Users/김건홍/Desktop/workspace/blink && npm run lint 2>&1)",
+      "Bash(echo Exit: $?:*)",
+      "Bash(cd /c/Users/김건홍/Desktop/workspace/blink && npm run lint 2>&1 && npm run build 2>&1)",
+      "Bash(tail:*)"
     ],
     "deny": [],
     "ask": []

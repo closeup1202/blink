@@ -5,8 +5,47 @@
  */
 
 import { storage } from '@/storage'
+import type { Contact, StorageData } from '@/types'
 import { isOverdue } from '@/utils/date'
 import { logger } from '@/utils/logger'
+
+// storage/index.ts와 동일한 키 (원자적 쓰기를 위해 background에서 직접 관리)
+const STORAGE_KEY = 'blink_contacts'
+
+/**
+ * 스토리지 쓰기 메시지 핸들러
+ * Background는 단일 스레드이므로 모든 쓰기가 직렬화됨 → race condition 방지
+ */
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message.type !== 'STORAGE_WRITE') return false
+
+  handleStorageWrite(message as StorageWriteMessage)
+    .then(() => sendResponse({ ok: true }))
+    .catch(e => sendResponse({ error: e instanceof Error ? e.message : String(e) }))
+  return true // 비동기 응답
+})
+
+type StorageWriteMessage =
+  | { type: 'STORAGE_WRITE'; op: 'save'; contact: Contact }
+  | { type: 'STORAGE_WRITE'; op: 'delete'; id: string }
+  | { type: 'STORAGE_WRITE'; op: 'clear' }
+
+async function handleStorageWrite(message: StorageWriteMessage): Promise<void> {
+  if (message.op === 'clear') {
+    await chrome.storage.local.remove(STORAGE_KEY)
+    return
+  }
+  const result = await chrome.storage.local.get(STORAGE_KEY)
+  const data: StorageData = result[STORAGE_KEY] || { contacts: {} }
+
+  if (message.op === 'save') {
+    data.contacts[message.contact.id] = message.contact
+  } else if (message.op === 'delete') {
+    delete data.contacts[message.id]
+  }
+
+  await chrome.storage.local.set({ [STORAGE_KEY]: data })
+}
 
 // Extension 설치 또는 업데이트 시
 chrome.runtime.onInstalled.addListener(async (details) => {
