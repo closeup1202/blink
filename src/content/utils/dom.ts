@@ -42,10 +42,7 @@ export function insertAfter(newElement: HTMLElement, targetSelector: string): bo
 /**
  * 요소를 대기하여 가져오기 - MutationObserver 기반 (즉시 감지)
  */
-export function waitForElement(
-  selector: string,
-  timeout = 10000
-): Promise<Element | null> {
+export function waitForElement(selector: string, timeout = 10000): Promise<Element | null> {
   const existing = document.querySelector(selector)
   if (existing) return Promise.resolve(existing)
 

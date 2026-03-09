@@ -4,6 +4,7 @@ import type { Contact } from '@/types'
 import ContactList from './components/ContactList'
 import ContactCard from './components/ContactCard'
 import { isOverdue } from '@/utils/date'
+import { logger } from '@/utils/logger'
 
 function App() {
   const [contacts, setContacts] = useState<Contact[]>([])
@@ -21,7 +22,7 @@ function App() {
       const allContacts = await storage.getAllContacts()
       setContacts(allContacts)
     } catch (error) {
-      console.error('Failed to load contacts:', error)
+      logger.error('Failed to load contacts:', error)
       const message = error instanceof Error ? error.message : 'Failed to load contacts'
       setError(message)
     } finally {
@@ -39,26 +40,37 @@ function App() {
     }
 
     // 쌍따옴표 이스케이프 및 개행문자 제거
-    sanitized = sanitized
-      .replace(/"/g, '""')
-      .replace(/[\r\n]/g, ' ')
+    sanitized = sanitized.replace(/"/g, '""').replace(/[\r\n]/g, ' ')
 
     return `"${sanitized}"`
   }
 
   function exportCSV() {
     try {
-      const header = ['Name', 'Title', 'Company', 'Status', 'Last Contacted', 'Next Follow Up', 'Notes', 'Profile URL']
-      const rows = contacts.map(c => [
-        c.name,
-        c.title ?? '',
-        c.company ?? '',
-        c.status,
-        new Date(c.lastContactedAt).toLocaleDateString(),
-        new Date(c.nextFollowUpDate).toLocaleDateString(),
-        c.memo ?? '',
-        c.id,
-      ].map(v => sanitizeCSVField(String(v))).join(','))
+      const header = [
+        'Name',
+        'Title',
+        'Company',
+        'Status',
+        'Last Contacted',
+        'Next Follow Up',
+        'Notes',
+        'Profile URL',
+      ]
+      const rows = contacts.map((c) =>
+        [
+          c.name,
+          c.title ?? '',
+          c.company ?? '',
+          c.status,
+          new Date(c.lastContactedAt).toLocaleDateString(),
+          new Date(c.nextFollowUpDate).toLocaleDateString(),
+          c.memo ?? '',
+          c.id,
+        ]
+          .map((v) => sanitizeCSVField(String(v)))
+          .join(',')
+      )
 
       const csv = [header.join(','), ...rows].join('\n')
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
@@ -69,31 +81,53 @@ function App() {
       a.click()
       URL.revokeObjectURL(url)
     } catch (error) {
-      console.error('Failed to export CSV:', error)
-      alert('Failed to export contacts. Please try again.')
+      logger.error('Failed to export CSV:', error)
+      const message = error instanceof Error ? error.message : 'Unknown error'
+      alert(`Failed to export contacts: ${message}`)
+    }
+  }
+
+  async function handleDeleteAll() {
+    if (!confirm(`Delete all ${contacts.length} contacts? This cannot be undone.`)) return
+    try {
+      await storage.clearAll()
+      await loadContacts()
+    } catch (error) {
+      logger.error('Failed to delete all contacts:', error)
+      const message = error instanceof Error ? error.message : 'Unknown error'
+      alert(`Failed to delete all contacts: ${message}`)
     }
   }
 
   // 검색 필터링
   const trimmedQuery = query.trim().toLowerCase()
   const searchedContacts = trimmedQuery
-    ? contacts.filter(c =>
-        c.name.toLowerCase().includes(trimmedQuery) ||
-        (c.company ?? '').toLowerCase().includes(trimmedQuery) ||
-        (c.title ?? '').toLowerCase().includes(trimmedQuery)
+    ? contacts.filter(
+        (c) =>
+          c.name.toLowerCase().includes(trimmedQuery) ||
+          (c.company ?? '').toLowerCase().includes(trimmedQuery) ||
+          (c.title ?? '').toLowerCase().includes(trimmedQuery)
       )
     : null // null = 그룹 뷰 유지
 
   // 상태별로 그룹화 (검색 중이 아닐 때)
-  const overdueContacts = contacts.filter(c => isOverdue(c.nextFollowUpDate) && c.status !== 'not_interested')
-  const contactedContacts = contacts.filter(c => c.status === 'contacted' && !isOverdue(c.nextFollowUpDate))
-  const repliedContacts = contacts.filter(c => c.status === 'replied')
-  const meetingContacts = contacts.filter(c => c.status === 'meeting_booked')
-  const notInterestedContacts = contacts.filter(c => c.status === 'not_interested')
+  const overdueContacts = contacts.filter(
+    (c) => isOverdue(c.nextFollowUpDate) && c.status !== 'not_interested'
+  )
+  const contactedContacts = contacts.filter(
+    (c) => c.status === 'contacted' && !isOverdue(c.nextFollowUpDate)
+  )
+  const repliedContacts = contacts.filter((c) => c.status === 'replied')
+  const meetingContacts = contacts.filter((c) => c.status === 'meeting_booked')
+  const notInterestedContacts = contacts.filter((c) => c.status === 'not_interested')
 
   if (loading) {
     return (
-      <div className="w-[400px] h-[600px] p-4 flex items-center justify-center" role="status" aria-live="polite">
+      <div
+        className="w-[400px] h-[600px] p-4 flex items-center justify-center"
+        role="status"
+        aria-live="polite"
+      >
         <p className="text-gray-500">Loading...</p>
       </div>
     )
@@ -101,7 +135,11 @@ function App() {
 
   if (error) {
     return (
-      <div className="w-[400px] h-[600px] p-4 flex flex-col items-center justify-center" role="alert" aria-live="assertive">
+      <div
+        className="w-[400px] h-[600px] p-4 flex flex-col items-center justify-center"
+        role="alert"
+        aria-live="assertive"
+      >
         <div className="text-center">
           <p className="text-red-600 font-semibold mb-2">Error</p>
           <p className="text-sm text-gray-600 mb-4">{error}</p>
@@ -130,14 +168,24 @@ function App() {
           <p className="text-sm opacity-90">LinkedIn Follow-up</p>
         </div>
         {contacts.length > 0 && (
-          <button
-            onClick={exportCSV}
-            className="text-xs bg-white/20 hover:bg-white/30 transition-colors px-3 py-1.5 rounded font-medium"
-            title="Export to CSV"
-            aria-label="Export contacts to CSV"
-          >
-            ↓ CSV
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={exportCSV}
+              className="text-xs bg-white/20 hover:bg-white/30 transition-colors px-3 py-1.5 rounded font-medium"
+              title="Export to CSV"
+              aria-label="Export contacts to CSV"
+            >
+              ↓ CSV
+            </button>
+            <button
+              onClick={handleDeleteAll}
+              className="text-xs bg-white/20 hover:bg-red-500/80 transition-colors px-3 py-1.5 rounded font-medium"
+              title="Delete all contacts"
+              aria-label="Delete all contacts"
+            >
+              🗑 All
+            </button>
+          </div>
         )}
       </div>
 
@@ -148,7 +196,7 @@ function App() {
             type="search"
             placeholder="Search by name, company, or title..."
             value={query}
-            onChange={e => setQuery(e.target.value)}
+            onChange={(e) => setQuery(e.target.value)}
             className="w-full text-sm border border-gray-200 rounded-md px-3 py-1.5 outline-none focus:border-linkedin transition-colors"
             aria-label="Search contacts"
           />
@@ -176,7 +224,7 @@ function App() {
                 {searchedContacts.length} result{searchedContacts.length !== 1 ? 's' : ''}
               </p>
               <div className="border border-gray-200 rounded-lg divide-y divide-gray-100 overflow-hidden">
-                {searchedContacts.map(contact => (
+                {searchedContacts.map((contact) => (
                   <ContactCard key={contact.id} contact={contact} onDelete={loadContacts} />
                 ))}
               </div>

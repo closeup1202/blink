@@ -21,13 +21,14 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
   handleStorageWrite(message as StorageWriteMessage)
     .then(() => sendResponse({ ok: true }))
-    .catch(e => sendResponse({ error: e instanceof Error ? e.message : String(e) }))
+    .catch((e) => sendResponse({ error: e instanceof Error ? e.message : String(e) }))
   return true // 비동기 응답
 })
 
 type StorageWriteMessage =
   | { type: 'STORAGE_WRITE'; op: 'save'; contact: Contact }
   | { type: 'STORAGE_WRITE'; op: 'delete'; id: string }
+  | { type: 'STORAGE_WRITE'; op: 'deleteMultiple'; ids: string[] }
   | { type: 'STORAGE_WRITE'; op: 'clear' }
 
 async function handleStorageWrite(message: StorageWriteMessage): Promise<void> {
@@ -42,6 +43,10 @@ async function handleStorageWrite(message: StorageWriteMessage): Promise<void> {
     data.contacts[message.contact.id] = message.contact
   } else if (message.op === 'delete') {
     delete data.contacts[message.id]
+  } else if (message.op === 'deleteMultiple') {
+    for (const id of message.ids) {
+      delete data.contacts[id]
+    }
   }
 
   await chrome.storage.local.set({ [STORAGE_KEY]: data })
@@ -69,7 +74,7 @@ chrome.runtime.onInstalled.addListener(async (details) => {
 async function injectContentScriptToExistingTabs() {
   try {
     const tabs = await chrome.tabs.query({
-      url: 'https://www.linkedin.com/*'
+      url: 'https://www.linkedin.com/*',
     })
 
     for (const tab of tabs) {
@@ -83,7 +88,7 @@ async function injectContentScriptToExistingTabs() {
         try {
           await chrome.scripting.executeScript({
             target: { tabId: tab.id },
-            files: ['content.js']
+            files: ['content.js'],
           })
           logger.log(`Blink: Injected into tab ${tab.id}`)
         } catch (err) {
@@ -107,17 +112,17 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 async function checkOverdueContacts() {
   try {
     const contacts = await storage.getAllContacts()
-    const overdueContacts = contacts.filter(contact =>
-      isOverdue(contact.nextFollowUpDate) && contact.status !== 'not_interested'
+    const overdueContacts = contacts.filter(
+      (contact) => isOverdue(contact.nextFollowUpDate) && contact.status !== 'not_interested'
     )
 
     if (overdueContacts.length > 0) {
       // 배지에 overdue 개수 표시
       chrome.action.setBadgeText({
-        text: String(overdueContacts.length)
+        text: String(overdueContacts.length),
       })
       chrome.action.setBadgeBackgroundColor({
-        color: '#CC1016'
+        color: '#CC1016',
       })
     } else {
       chrome.action.setBadgeText({ text: '' })

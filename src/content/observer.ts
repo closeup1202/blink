@@ -13,16 +13,14 @@ import type { Contact } from '@/types'
 import { logger } from '@/utils/logger'
 
 let currentUrl = location.href
-let buttonRoots: Root[] = [] // 여러 버튼을 관리 (프로필 카드 + sticky header)
+let buttonRoots: Root[] = []
 let searchObserver: MutationObserver | null = null
 let cachedContactMap: Map<string, Contact> | null = null
 let urlPollingInterval: number | null = null
 let popstateHandler: (() => void) | null = null
-let buttonInjectionTimer: number | null = null // 버튼 재시도 타이머
 let badgeDebounceTimer: number | null = null
 let visibilityChangeHandler: (() => void) | null = null
-let isInjectingButton = false  // 동시 주입 방지 플래그
-let isInjectingBadges = false  // 동시 배지 주입 방지 플래그
+let isInjectingBadges = false
 
 /**
  * LinkedIn 페이지 변화 감지 시작
@@ -134,18 +132,11 @@ function cleanup() {
     logger.log('Blink: Popstate listener removed')
   }
 
-  // 버튼 재시도 타이머 정리
-  if (buttonInjectionTimer) {
-    clearTimeout(buttonInjectionTimer)
-    buttonInjectionTimer = null
-    logger.log('Blink: Button injection timer cleared')
-  }
-
-  // 버튼 React roots 정리 (race condition 방지를 위해 순차 처리)
+  // 버튼 React roots 정리
   const rootsToUnmount = [...buttonRoots]
   buttonRoots = []
 
-  rootsToUnmount.forEach(root => {
+  rootsToUnmount.forEach((root) => {
     try {
       root.unmount()
     } catch (e) {
@@ -153,8 +144,7 @@ function cleanup() {
     }
   })
 
-  // unmount 완료 후 DOM 제거
-  document.querySelectorAll(`[id^="${BUTTON_ID}"]`).forEach(el => el.remove())
+  document.getElementById(BUTTON_ID)?.remove()
 
   // 검색 observer 정리
   if (searchObserver) {
@@ -175,8 +165,6 @@ function cleanup() {
     visibilityChangeHandler = null
   }
 
-  // 주입 플래그 초기화
-  isInjectingButton = false
   isInjectingBadges = false
 
   // 캐시 정리
@@ -187,13 +175,9 @@ function cleanup() {
  * 페이지 변경 시 실행
  */
 function onPageChange() {
-  logger.log(`Blink: onPageChange called, isProfile: ${isProfilePage()}, isSearch: ${isSearchPage()}`)
-
-  // 이전 버튼 재시도 타이머 취소 (중복 주입 방지)
-  if (buttonInjectionTimer) {
-    clearTimeout(buttonInjectionTimer)
-    buttonInjectionTimer = null
-  }
+  logger.log(
+    `Blink: onPageChange called, isProfile: ${isProfilePage()}, isSearch: ${isSearchPage()}`
+  )
 
   // 검색 페이지가 아니면 검색 observer 정리
   if (!isSearchPage() && searchObserver) {
@@ -204,17 +188,18 @@ function onPageChange() {
   if (isProfilePage()) {
     logger.log('Blink: Profile page detected, injecting button')
     injectBlinkButton()
-
-    // 실패 시 재시도 (LinkedIn DOM이 늦게 로드되는 경우 대비)
-    buttonInjectionTimer = window.setTimeout(async () => {
-      // 버튼이 아직 주입되지 않았으면 재시도
-      const existingButtons = document.querySelectorAll(`[id^="${BUTTON_ID}"]`)
-      if (isProfilePage() && existingButtons.length === 0) {
-        logger.log('Blink: Retrying button injection after 2s delay')
-        await injectBlinkButton()
+  } else {
+    // 프로필 페이지가 아니면 버튼 제거
+    const rootsToUnmount = [...buttonRoots]
+    buttonRoots = []
+    rootsToUnmount.forEach((root) => {
+      try {
+        root.unmount()
+      } catch (e) {
+        logger.warn('Blink: Failed to unmount button root', e)
       }
-      buttonInjectionTimer = null
-    }, 2000)
+    })
+    document.getElementById(BUTTON_ID)?.remove()
   }
 
   if (isSearchPage()) {
@@ -237,157 +222,37 @@ function isSearchPage(): boolean {
   return url.includes('/search/results/people/')
 }
 
-
-/**
- * 요소가 sticky/fixed 헤더 안에 있는지 확인
- */
-function isStickyElement(el: Element): boolean {
-  let parent = el.parentElement
-  for (let i = 0; i < 10 && parent; i++) {
-    const style = window.getComputedStyle(parent)
-    if (
-      (style.position === 'fixed' || style.position === 'sticky') &&
-      parseInt(style.top || '0') < 100
-    ) {
-      return true
-    }
-    parent = parent.parentElement
-  }
-  return false
-}
-
-/**
- * 유효한 프로필 액션 컨테이너 후보인지 검증
- * - sticky/fixed 헤더 제외
- * - 검색 결과 카드 내부 제외
- */
-function isValidProfileEl(el: Element): boolean {
-  return !isStickyElement(el) && !el.closest('[data-view-name="people-search-result"]')
-}
-
-/**
- * 현재 DOM에서 non-sticky 프로필 액션 컨테이너를 탐색
- *
- * 1차: .pvs-profile-actions__custom
- * 2차: [id$="-profile-overflow-action"] More 버튼 → 부모
- * 3차: aria-label="More actions" 버튼 → 부모
- * 4차: Follow/Connect/Message 버튼 → 부모 (레이아웃 최소 프로필 대응)
- */
-function findActionsContainer(): HTMLElement | null {
-  // 1차
-  const validCustom = Array.from(document.querySelectorAll('.pvs-profile-actions__custom'))
-    .find(isValidProfileEl)
-  if (validCustom) return validCustom as HTMLElement
-
-  // 2차
-  const validOverflowById = Array.from(document.querySelectorAll('[id$="-profile-overflow-action"]'))
-    .find(isValidProfileEl)
-  if (validOverflowById) {
-    return (validOverflowById.closest('.artdeco-dropdown')?.parentElement as HTMLElement) ?? null
-  }
-
-  // 3차
-  const validMoreBtn = Array.from(document.querySelectorAll('button[aria-label="More actions"]'))
-    .find(isValidProfileEl)
-  if (validMoreBtn) {
-    return (validMoreBtn.closest('.artdeco-dropdown')?.parentElement as HTMLElement) ?? null
-  }
-
-  // 4차: 기본 액션 버튼 → 부모 컨테이너
-  const actionBtnSelector = [
-    'button[aria-label*="Follow"]', 'button[aria-label*="팔로우"]',
-    'button[aria-label*="Connect"]', 'button[aria-label*="연결"]',
-    'button[aria-label*="Message"]', 'button[aria-label*="메시지"]',
-  ].join(', ')
-  const validActionBtn = Array.from(document.querySelectorAll(actionBtnSelector))
-    .find(isValidProfileEl)
-  if (validActionBtn?.parentElement) return validActionBtn.parentElement as HTMLElement
-
-  return null
-}
-
-/**
- * 프로필 액션 컨테이너가 나타날 때까지 대기
- *
- * MutationObserver(childList + attributes) + 300ms 폴링 조합.
- * LinkedIn이 노드 추가 대신 visibility/class 토글로 전환하는 경우도 감지.
- */
-function waitForProfileActionsContainer(timeoutMs: number): Promise<HTMLElement | null> {
-  const immediate = findActionsContainer()
-  if (immediate) return Promise.resolve(immediate)
-
-  return new Promise(resolve => {
-    let done = false
-
-    const finish = (result: HTMLElement | null) => {
-      if (done) return
-      done = true
-      clearInterval(pollId)
-      clearTimeout(timerId)
-      observer.disconnect()
-      resolve(result)
-    }
-
-    const check = () => {
-      if (!isProfilePage()) { finish(null); return }
-      const container = findActionsContainer()
-      if (container) finish(container)
-    }
-
-    const pollId = window.setInterval(check, 300)
-    const timerId = window.setTimeout(() => finish(null), timeoutMs)
-    const observer = new MutationObserver(check)
-    observer.observe(document.body, {
-      childList: true,
-      subtree: true,
-      attributes: true,
-      attributeFilter: ['class', 'style', 'hidden'],
-    })
-  })
-}
-
 /**
  * 프로필 페이지에 Blink 버튼 주입
+ * document.body에 fixed로 직접 주입 — LinkedIn DOM 셀렉터에 의존하지 않음
  */
-async function injectBlinkButton() {
-  if (isInjectingButton) {
-    logger.log('Blink: Button injection already in progress, skipping')
+function injectBlinkButton() {
+  logger.log('Blink: Injecting button into body')
+
+  // 기존 버튼 정리
+  const rootsToUnmount = [...buttonRoots]
+  buttonRoots = []
+  rootsToUnmount.forEach((root) => {
+    try {
+      root.unmount()
+    } catch (e) {
+      logger.warn('Blink: Failed to unmount', e)
+    }
+  })
+  document.getElementById(BUTTON_ID)?.remove()
+
+  if (!isProfilePage()) return
+
+  // 중복 주입 방어
+  if (document.getElementById(BUTTON_ID)) {
+    logger.log('Blink: Button already exists, skipping injection')
     return
   }
-  isInjectingButton = true
-  try {
-    logger.log('Blink: Attempting to inject button on profile page')
 
-    // 기존 버튼 정리
-    const rootsToUnmount = [...buttonRoots]
-    buttonRoots = []
-    rootsToUnmount.forEach(root => {
-      try { root.unmount() } catch (e) { logger.warn('Blink: Failed to unmount', e) }
-    })
-    document.querySelectorAll(`[id^="${BUTTON_ID}"]`).forEach(el => el.remove())
-
-    const actionsContainer = await waitForProfileActionsContainer(8000)
-
-    if (!actionsContainer || !isProfilePage()) {
-      logger.warn('Blink: Profile actions container not found')
-      return
-    }
-
-    // 중복 주입 최종 방어
-    if (document.querySelector(`[id^="${BUTTON_ID}"]`)) {
-      logger.warn('Blink: Button already exists, skipping injection')
-      return
-    }
-
-    const { button, root } = createBlinkButton()
-    button.id = BUTTON_ID
-
-    actionsContainer.appendChild(button)
-    logger.log('Blink: Button injected into profile actions container')
-    buttonRoots.push(root)
-  } finally {
-    isInjectingButton = false
-  }
+  const { button, root } = createBlinkButton()
+  document.body.appendChild(button)
+  buttonRoots.push(root)
+  logger.log('Blink: Button injected')
 }
 
 /**
@@ -397,33 +262,33 @@ async function injectSearchBadges() {
   if (isInjectingBadges) return
   isInjectingBadges = true
   try {
-  // 이전 검색 페이지 observer 정리
-  if (searchObserver) {
-    searchObserver.disconnect()
-    searchObserver = null
-  }
+    // 이전 검색 페이지 observer 정리
+    if (searchObserver) {
+      searchObserver.disconnect()
+      searchObserver = null
+    }
 
-  // 검색 페이지 진입 시 contacts 캐시 갱신
-  const contacts = await storage.getAllContacts()
-  cachedContactMap = new Map(contacts.map(c => [c.id, c]))
+    // 검색 페이지 진입 시 contacts 캐시 갱신
+    const contacts = await storage.getAllContacts()
+    cachedContactMap = new Map(contacts.map((c) => [c.id, c]))
 
-  // 첫 번째 검색 결과가 나타날 때까지 대기
-  const firstResult = await waitForElement('[data-view-name="people-search-result"]', 5000)
-  if (!firstResult || !isSearchPage()) return // finally 블록에서 isInjectingBadges = false 처리됨
+    // 첫 번째 검색 결과가 나타날 때까지 대기
+    const firstResult = await waitForElement('[data-view-name="people-search-result"]', 5000)
+    if (!firstResult || !isSearchPage()) return // finally 블록에서 isInjectingBadges = false 처리됨
 
-  // 현재 보이는 결과에 배지 주입
-  injectBadgesIntoResults()
+    // 현재 보이는 결과에 배지 주입
+    injectBadgesIntoResults()
 
-  // 무한 스크롤 대응: 부모 컨테이너 관찰
-  const container = firstResult.closest('ul') ?? firstResult.parentElement ?? document.body
-  searchObserver = new MutationObserver(() => {
-    if (badgeDebounceTimer) clearTimeout(badgeDebounceTimer)
-    badgeDebounceTimer = window.setTimeout(() => {
-      badgeDebounceTimer = null
-      injectBadgesIntoResults()
-    }, 150)
-  })
-  searchObserver.observe(container, { childList: true, subtree: true })
+    // 무한 스크롤 대응: 부모 컨테이너 관찰
+    const container = firstResult.closest('ul') ?? firstResult.parentElement ?? document.body
+    searchObserver = new MutationObserver(() => {
+      if (badgeDebounceTimer) clearTimeout(badgeDebounceTimer)
+      badgeDebounceTimer = window.setTimeout(() => {
+        badgeDebounceTimer = null
+        injectBadgesIntoResults()
+      }, 150)
+    })
+    searchObserver.observe(container, { childList: true, subtree: true })
   } finally {
     isInjectingBadges = false
   }
@@ -442,9 +307,10 @@ function injectBadgesIntoResults() {
     if (result.querySelector(`.${BADGE_CLASS}`)) continue
 
     // result 자체가 <a> 태그 (href="/in/...")
-    const href = result instanceof HTMLAnchorElement
-      ? result.href
-      : (result.querySelector('a[href*="/in/"]') as HTMLAnchorElement | null)?.href
+    const href =
+      result instanceof HTMLAnchorElement
+        ? result.href
+        : (result.querySelector('a[href*="/in/"]') as HTMLAnchorElement | null)?.href
     if (!href?.includes('/in/')) continue
 
     const profileId = normalizeLinkedInProfileUrl(href)

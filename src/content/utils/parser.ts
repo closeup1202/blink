@@ -6,7 +6,7 @@ import { logger } from '@/utils/logger'
 
 export interface ProfileInfo {
   name: string
-  title?: string   // Optional: LinkedIn UI 변경 시 파싱 실패 가능
+  title?: string // Optional: LinkedIn UI 변경 시 파싱 실패 가능
   company?: string // Optional: LinkedIn UI 변경 시 파싱 실패 가능
   profileUrl: string
 }
@@ -41,22 +41,34 @@ export function parseProfileInfo(): ProfileInfo | null {
 }
 
 /**
- * 이름 추출 (다중 셀렉터 fallback)
+ * 이름 추출 (다중 셀렉터 + document.title fallback)
  */
 function extractName(): string {
   const selectors = [
-    'h1.inline.t-24',                          // 기본 셀렉터
-    'h1.text-heading-xlarge',                  // 새 디자인
-    '.pv-top-card--list h1',                   // 레거시
-    '[data-generated-suggestion-target] h1',   // 동적 로드
-    'main h1',                                 // 최후 수단
+    'h1.inline.t-24', // 기본 셀렉터
+    'h1.text-heading-xlarge', // 새 디자인
+    '.pv-top-card--list h1', // 레거시
+    '[data-generated-suggestion-target] h1', // 동적 로드
+    'main h1', // 거의 모든 레이아웃
+    'h1', // 최후 DOM 수단
   ]
 
   for (const selector of selectors) {
     const element = document.querySelector(selector)
     const text = element?.textContent?.trim()
-    if (text && text.length > 0 && text.length < 100) { // 합리적인 이름 길이
+    if (text && text.length > 0 && text.length < 100) {
       return text
+    }
+  }
+
+  // document.title fallback — SPA 탐색 시 DOM보다 먼저 업데이트됨
+  // LinkedIn 형식: "Bill Gates | LinkedIn" 또는 "Bill Gates - Chair... | LinkedIn"
+  const titleMatch = document.title.match(/^(.+?)(?:\s*-\s*.+)?\s*\|\s*LinkedIn\s*$/i)
+  if (titleMatch?.[1]) {
+    const name = titleMatch[1].trim()
+    if (name.length > 0 && name.length < 100) {
+      logger.log('Blink: Name extracted from document.title:', name)
+      return name
     }
   }
 
@@ -68,8 +80,8 @@ function extractName(): string {
  */
 function extractTitleAndCompany(): { title: string; company: string } {
   const selectors = [
-    '.text-body-medium.break-words',           // 기본
-    '.pv-top-card--list .text-body-medium',    // 레거시
+    '.text-body-medium.break-words', // 기본
+    '.pv-top-card--list .text-body-medium', // 레거시
     '.pv-top-card-profile-picture__container ~ div .text-body-medium', // 구조 기반
   ]
 

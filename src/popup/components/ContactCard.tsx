@@ -1,6 +1,7 @@
 import type { Contact } from '@/types'
 import { getRelativeTime, getDaysOverdue, isOverdue } from '@/utils/date'
 import { storage } from '@/storage'
+import { logger } from '@/utils/logger'
 
 interface ContactCardProps {
   contact: Contact
@@ -18,14 +19,18 @@ function ContactCard({ contact, onDelete }: ContactCardProps) {
       await storage.deleteContact(contact.id)
       onDelete()
     } catch (error) {
-      console.error('Failed to delete contact:', error)
+      logger.error('Failed to delete contact:', error)
       const message = error instanceof Error ? error.message : 'Failed to delete contact'
       alert(`Error: ${message}`)
     }
   }
 
   return (
-    <div className="p-3 hover:bg-gray-50 transition-colors" role="article" aria-label={`Contact: ${contact.name}`}>
+    <div
+      className="p-3 hover:bg-gray-50 transition-colors"
+      role="article"
+      aria-label={`Contact: ${contact.name}`}
+    >
       {/* Name & Company */}
       <div className="flex items-center justify-between mb-1">
         <a
@@ -64,9 +69,7 @@ function ContactCard({ contact, onDelete }: ContactCardProps) {
 
       {/* Status & Timing */}
       <div className="flex items-center justify-between text-xs">
-        <span className="text-gray-500">
-          Last: {getRelativeTime(contact.lastContactedAt)}
-        </span>
+        <span className="text-gray-500">Last: {getRelativeTime(contact.lastContactedAt)}</span>
 
         {isContactOverdue ? (
           <span className="text-red-600 font-semibold">

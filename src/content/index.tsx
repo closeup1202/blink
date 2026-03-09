@@ -21,9 +21,9 @@ observeLinkedInChanges()
 // CSS 주입 (중복 방지: 이미 주입된 경우 건너뜀)
 const STYLE_ID = 'blink-content-styles'
 if (!document.getElementById(STYLE_ID)) {
-const style = document.createElement('style')
-style.id = STYLE_ID
-style.textContent = `
+  const style = document.createElement('style')
+  style.id = STYLE_ID
+  style.textContent = `
   .blink-badge {
     display: inline-flex;
     align-items: center;
@@ -46,5 +46,5 @@ style.textContent = `
     50% { opacity: 0.7; }
   }
 `
-document.head.appendChild(style)
+  document.head.appendChild(style)
 }

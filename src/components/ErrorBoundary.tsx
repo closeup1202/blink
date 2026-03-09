@@ -1,4 +1,5 @@
 import { Component, type ReactNode } from 'react'
+import { logger } from '@/utils/logger'
 
 interface Props {
   children: ReactNode
@@ -24,7 +25,7 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: { componentStack: string }) {
-    console.error('[Blink] ErrorBoundary caught:', error, info.componentStack)
+    logger.error('[Blink] ErrorBoundary caught:', error, info.componentStack)
   }
 
   render() {
@@ -34,11 +35,7 @@ export class ErrorBoundary extends Component<Props, State> {
       }
 
       return (
-        <div
-          className="w-full p-4 text-center"
-          role="alert"
-          aria-live="assertive"
-        >
+        <div className="w-full p-4 text-center" role="alert" aria-live="assertive">
           <p className="text-red-600 font-semibold text-sm">Something went wrong</p>
           {this.state.error?.message && (
             <p className="text-xs text-gray-500 mt-1">{this.state.error.message}</p>

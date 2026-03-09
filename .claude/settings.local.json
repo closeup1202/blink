@@ -21,7 +21,10 @@
       "Bash(cd /c/Users/김건홍/Desktop/workspace/blink && npm run lint 2>&1)",
       "Bash(echo Exit: $?:*)",
       "Bash(cd /c/Users/김건홍/Desktop/workspace/blink && npm run lint 2>&1 && npm run build 2>&1)",
-      "Bash(tail:*)"
+      "Bash(tail:*)",
+      "Bash(npm run:*)",
+      "Bash(wc:*)",
+      "Bash(npx prettier:*)"
     ],
     "deny": [],
     "ask": []

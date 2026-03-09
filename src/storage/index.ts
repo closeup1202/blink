@@ -7,7 +7,10 @@ const STORAGE_KEY = 'blink_contacts'
  * Storage 에러 타입
  */
 export class StorageError extends Error {
-  constructor(message: string, public readonly cause?: unknown) {
+  constructor(
+    message: string,
+    public readonly cause?: unknown
+  ) {
     super(message)
     this.name = 'StorageError'
   }
@@ -78,11 +81,11 @@ export const storage = {
     }
 
     try {
-      const response = await chrome.runtime.sendMessage({
+      const response = (await chrome.runtime.sendMessage({
         type: 'STORAGE_WRITE',
         op: 'save',
         contact,
-      }) as { ok?: boolean; error?: string } | undefined
+      })) as { ok?: boolean; error?: string } | undefined
 
       if (response?.error) throw new Error(response.error)
     } catch (e) {
@@ -103,17 +106,43 @@ export const storage = {
     }
 
     try {
-      const response = await chrome.runtime.sendMessage({
+      const response = (await chrome.runtime.sendMessage({
         type: 'STORAGE_WRITE',
         op: 'delete',
         id,
-      }) as { ok?: boolean; error?: string } | undefined
+      })) as { ok?: boolean; error?: string } | undefined
 
       if (response?.error) throw new Error(response.error)
     } catch (e) {
       if (e instanceof StorageError) throw e
       logger.error('Blink: Failed to delete contact', e)
       throw new StorageError('Failed to delete contact', e)
+    }
+  },
+
+  /**
+   * 여러 연락처 일괄 삭제 (단건 N회 대신 단일 R-M-W)
+   * Background service worker를 통해 원자적으로 처리
+   * @throws {StorageError} 익스텐션 컨텍스트가 무효하거나 storage 접근 실패 시
+   */
+  async deleteMultiple(ids: string[]): Promise<void> {
+    if (!isExtensionContextValid()) {
+      throw new StorageError('Extension context is invalid. Please reload the extension.')
+    }
+    if (ids.length === 0) return
+
+    try {
+      const response = (await chrome.runtime.sendMessage({
+        type: 'STORAGE_WRITE',
+        op: 'deleteMultiple',
+        ids,
+      })) as { ok?: boolean; error?: string } | undefined
+
+      if (response?.error) throw new Error(response.error)
+    } catch (e) {
+      if (e instanceof StorageError) throw e
+      logger.error('Blink: Failed to delete multiple contacts', e)
+      throw new StorageError('Failed to delete contacts', e)
     }
   },
 
@@ -127,10 +156,10 @@ export const storage = {
     }
 
     try {
-      const response = await chrome.runtime.sendMessage({
+      const response = (await chrome.runtime.sendMessage({
         type: 'STORAGE_WRITE',
         op: 'clear',
-      }) as { ok?: boolean; error?: string } | undefined
+      })) as { ok?: boolean; error?: string } | undefined
 
       if (response?.error) throw new Error(response.error)
     } catch (e) {

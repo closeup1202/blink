@@ -1,70 +1,104 @@
-import { useState, useCallback, createElement } from 'react'
+import { useState, useCallback, useEffect, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { SaveLeadModal } from './SaveLeadModal'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
+import { storage } from '@/storage'
+import type { Contact } from '@/types'
+import { STATUS_CONFIG } from '@/types'
+import { getCurrentProfileId } from '@/utils/url'
 
 export const BUTTON_ID = 'blink-action-button'
 
-export function BlinkButton() {
+function BlinkButton() {
   const [showModal, setShowModal] = useState(false)
-  const handleModalClose = useCallback(() => setShowModal(false), [])
+  const [contact, setContact] = useState<Contact | null>(null)
+
+  useEffect(() => {
+    let mounted = true
+    const profileId = getCurrentProfileId()
+    if (!profileId) return
+
+    // 초기 로드
+    storage.getContact(profileId).then((c) => {
+      if (mounted) setContact(c ?? null)
+    })
+
+    // 팝업에서 삭제/수정 시 storage 변경 감지 → 버튼 상태 즉시 갱신
+    const handleStorageChange = () => {
+      storage.getContact(profileId).then((c) => {
+        if (mounted) setContact(c ?? null)
+      })
+    }
+    chrome.storage.onChanged.addListener(handleStorageChange)
+
+    return () => {
+      mounted = false
+      chrome.storage.onChanged.removeListener(handleStorageChange)
+    }
+  }, [])
+
+  const handleModalClose = useCallback(() => {
+    setShowModal(false)
+    const profileId = getCurrentProfileId()
+    if (profileId) {
+      storage.getContact(profileId).then((c) => setContact(c ?? null))
+    }
+  }, [])
+
+  const cfg = contact ? STATUS_CONFIG[contact.status] : null
 
   return (
     <>
       <button
         onClick={() => setShowModal(true)}
-        aria-label="Save contact to Blink CRM"
-        title="Save this LinkedIn contact for follow-up"
+        aria-label={cfg ? `Blink: ${cfg.label}` : 'Save to Blink'}
+        title={cfg ? `Blink: ${cfg.label}` : 'Save to Blink'}
         style={{
-          display: 'inline-flex',
+          width: '40px',
+          height: '40px',
+          borderRadius: '8px',
+          background: 'white',
+          border: `2px solid ${cfg ? cfg.color : '#0A66C2'}`,
+          cursor: 'pointer',
+          fontSize: '20px',
+          display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          padding: '0 16px',
-          height: '32px',
-          background: 'white',
-          border: '1px solid #0A66C2',
-          borderRadius: '16px',
-          color: '#0A66C2',
-          fontSize: '16px',
-          fontWeight: 600,
-          cursor: 'pointer',
-          transition: 'all 0.2s',
-          fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+          transition: 'transform 0.15s, box-shadow 0.15s',
           outline: 'none',
-          whiteSpace: 'nowrap',
-          boxSizing: 'border-box',
-          verticalAlign: 'middle',
+          padding: '0',
+          lineHeight: '1',
         }}
-        onMouseEnter={e => {
-          e.currentTarget.style.background = '#e8f3ff'
-          e.currentTarget.style.borderColor = '#004182'
+        onMouseEnter={(e) => {
+          e.currentTarget.style.transform = 'scale(1.1)'
+          e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.28)'
         }}
-        onMouseLeave={e => {
-          e.currentTarget.style.background = 'white'
-          e.currentTarget.style.borderColor = '#0A66C2'
+        onMouseLeave={(e) => {
+          e.currentTarget.style.transform = 'scale(1)'
+          e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.2)'
         }}
       >
-        Blink
+        {cfg ? cfg.emoji : '💼'}
       </button>
-      {showModal && (
-        <SaveLeadModal onClose={handleModalClose} />
-      )}
+      {showModal && <SaveLeadModal onClose={handleModalClose} />}
     </>
   )
 }
 
-/**
- * Create Blink button element
- */
 export function createBlinkButton(): { button: HTMLElement; root: Root } {
   const container = document.createElement('div')
   container.id = BUTTON_ID
-  // flex item으로 동작하도록 — LinkedIn 액션 버튼 컨테이너(flex)에 맞게 정렬
-  container.style.display = 'inline-flex'
-  container.style.alignItems = 'center'
+  // body에 fixed로 주입 — LinkedIn 셀렉터에 의존하지 않음
+  container.style.position = 'fixed'
+  container.style.bottom = '64px'
+  container.style.right = '24px'
+  container.style.zIndex = '9999'
 
   const root = createRoot(container)
-  root.render(createElement(ErrorBoundary, { fallback: null, children: createElement(BlinkButton) }))
+  root.render(
+    createElement(ErrorBoundary, { fallback: null, children: createElement(BlinkButton) })
+  )
 
   return { button: container, root }
 }
