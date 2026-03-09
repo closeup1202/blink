@@ -8,7 +8,6 @@ export interface ProfileInfo {
   name: string
   title?: string // Optional: LinkedIn UI 변경 시 파싱 실패 가능
   company?: string // Optional: LinkedIn UI 변경 시 파싱 실패 가능
-  profileUrl: string
 }
 
 /**
@@ -16,8 +15,6 @@ export interface ProfileInfo {
  */
 export function parseProfileInfo(): ProfileInfo | null {
   try {
-    const profileUrl = window.location.href
-
     // 이름 추출 - 다중 fallback으로 안정성 향상
     const name = extractName()
     if (!name) {
@@ -32,7 +29,6 @@ export function parseProfileInfo(): ProfileInfo | null {
       name,
       title: title || undefined,
       company: company || undefined,
-      profileUrl,
     }
   } catch (error) {
     logger.error('Failed to parse profile info:', error)

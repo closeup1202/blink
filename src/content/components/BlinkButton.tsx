@@ -21,13 +21,13 @@ function BlinkButton() {
     // 초기 로드
     storage.getContact(profileId).then((c) => {
       if (mounted) setContact(c ?? null)
-    })
+    }).catch(() => { /* storage 에러 시 기본 상태 유지 */ })
 
     // 팝업에서 삭제/수정 시 storage 변경 감지 → 버튼 상태 즉시 갱신
     const handleStorageChange = () => {
       storage.getContact(profileId).then((c) => {
         if (mounted) setContact(c ?? null)
-      })
+      }).catch(() => { /* storage 에러 시 기본 상태 유지 */ })
     }
     chrome.storage.onChanged.addListener(handleStorageChange)
 
@@ -41,7 +41,7 @@ function BlinkButton() {
     setShowModal(false)
     const profileId = getCurrentProfileId()
     if (profileId) {
-      storage.getContact(profileId).then((c) => setContact(c ?? null))
+      storage.getContact(profileId).then((c) => setContact(c ?? null)).catch(() => {})
     }
   }, [])
 

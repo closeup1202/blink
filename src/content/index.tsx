@@ -11,8 +11,9 @@ logger.log('Blink content script loaded!')
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.type === 'ping') {
     sendResponse({ status: 'ok' })
+    return true
   }
-  return true
+  return false
 })
 
 // LinkedIn SPA 변화 감지 시작

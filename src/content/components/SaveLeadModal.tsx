@@ -8,8 +8,6 @@ import { STATUS_CONFIG } from '@/types'
 import { addDays } from '@/utils/date'
 import { logger } from '@/utils/logger'
 
-export const MODAL_ID = 'blink-save-lead-modal'
-
 interface SaveLeadModalProps {
   onClose: () => void
 }
@@ -137,6 +135,7 @@ export function SaveLeadModal({ onClose }: SaveLeadModalProps) {
       setError(null)
 
       const now = Date.now()
+      const clampedDays = Math.min(90, Math.max(1, followUpDays))
       const contact: Contact = {
         id: profileId,
         name: profileInfo.name,
@@ -144,8 +143,8 @@ export function SaveLeadModal({ onClose }: SaveLeadModalProps) {
         company: profileInfo.company,
         status,
         lastContactedAt: now,
-        nextFollowUpDate: addDays(new Date(now), followUpDays).getTime(),
-        followUpAfterDays: followUpDays,
+        nextFollowUpDate: addDays(new Date(now), clampedDays).getTime(),
+        followUpAfterDays: clampedDays,
         memo: memo.trim() || undefined,
         createdAt: existing?.createdAt ?? now,
       }
